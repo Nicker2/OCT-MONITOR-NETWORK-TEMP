@@ -69,20 +69,17 @@ O projeto foi construído utilizando bibliotecas nativas e de baixo nível para 
 
 ## 🛠️ Como Executar e Compilar
 
-1. **Clone este repositório:**
-   ```bash
-   git clone [https://github.com/SEU_USUARIO/monitor-oct-network-temp.git](https://github.com/SEU_USUARIO/monitor-oct-network-temp.git)
-   ```
+1. **Baixe os arquivos deste repositório:**
 
-2. **Instale as dependências via PIP:**
+2. **Instale o Python e as dependências via PIP:**
 ```bash
 pip install psutil wmi pywin32 pillow pystray
 ```
 
 3. **Inicie o monitor localmente:**
-   *(É recomendável executar com privilégios de Administrador para leitura irrestrita do WMI)*
+   *(É recomendável executar com privilégios de Administrador para leitura irrestrita da temperatura via WMI)*
    ```bash
-   python main.py
+   python oct-monitor-network-temp.py
    ```
 
 *(Nota: Na primeira execução inicial, clique com o botão direito no ícone verde criado perto do relógio do Windows, acesse as `Opções` e defina sua placa de rede e o sensor térmico adequado).*
