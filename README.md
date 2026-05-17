@@ -13,6 +13,8 @@ Um sistema de telemetria em tempo real projetado para monitorar a **temperatura 
 Através de um display não-intrusivo ancorado nativamente na Barra de Tarefas do Windows, o sistema alerta operadores instantaneamente sobre degradações físicas ou térmicas que possam impactar o fluxo de atendimento aos pacientes.
 <img width="499" height="41" alt="ok" src="https://github.com/user-attachments/assets/439899c7-566b-4ac0-81f6-03fce8ab19e9" />
 <img width="499" height="41" alt="aquecida" src="https://github.com/user-attachments/assets/b3568bf5-74ab-4ea8-b6d8-ec818068065b" />
+<img width="498" height="41" alt="reconecte" src="https://github.com/user-attachments/assets/7adfd76f-b262-4c73-bfdc-da20297cb2b0" />
+<img width="498" height="41" alt="reinicie" src="https://github.com/user-attachments/assets/db12a35d-cdf1-41c7-9470-8d7d646bd696" />
 <img width="499" height="41" alt="critica" src="https://github.com/user-attachments/assets/f0c4a8ca-0c14-4001-9d7d-1749e21a6a4d" />
 <img width="499" height="41" alt="ligaoar" src="https://github.com/user-attachments/assets/cc45eef7-7f94-4f16-ae45-a1cc17ea34d5" />
 
