@@ -32,8 +32,11 @@ Em vez de exibir logs complexos, o sistema traduz a falha em **instruções oper
 ## 🚀 Funcionalidades Principais
 
 * **🎯 Holograma Nativo (Win32 API):** O banner de status não atua como uma janela solta. Ele injeta sua interface nativamente na `Shell_TrayWnd` (Bandeja do Sistema do Windows). Ele não sobrepõe os exames e não rouba o foco do mouse.
+
 * **🔄 Exibição Estática Cíclica:** Mensagens de emergência são fatiadas em blocos curtos que rotacionam na tela. Isso garante leitura imediata pelo técnico, sem precisar esperar o texto rolar horizontalmente.
+
 * **🧠 Algoritmo de Prioridade de Risco:** O sistema mapeia e categoriza falhas (ex: distingue se a rede lenta é por estática no cabo frio ou se o chip está fritando), evitando alarmes falsos.
+
 * **🕹️ Simulador de Crise Embutido:** Interface de desenvolvimento (Aba de Testes) para forçar falhas térmicas e gargalos de rede virtualmente, ideal para validar reações e treinar equipes.
 
 ---
