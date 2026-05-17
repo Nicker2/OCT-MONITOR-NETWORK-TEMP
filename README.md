@@ -91,4 +91,4 @@ pip install psutil wmi pywin32 pillow pystray
 
 > **Disclaimer:** Desenvolvido para otimização de infraestrutura clínica. Este software não substitui a manutenção preventiva e periódica do equipamento DRI OCT Triton Plus.
 
-```
+
