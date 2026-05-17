@@ -72,9 +72,9 @@ O projeto foi construído utilizando bibliotecas nativas e de baixo nível para 
 1. **Baixe os arquivos deste repositório:**
 
 2. **Instale o Python e as dependências via PIP:**
-```bash
-pip install psutil wmi pywin32 pillow pystray
-```
+   ```bash
+   pip install psutil wmi pywin32 pillow pystray
+   ```
 
 3. **Inicie o monitor localmente:**
    *(É recomendável executar com privilégios de Administrador para leitura irrestrita da temperatura via WMI)*
