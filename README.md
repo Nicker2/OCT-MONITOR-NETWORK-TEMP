@@ -14,6 +14,7 @@ Através de um display não-intrusivo ancorado nativamente na Barra de Tarefas d
 <img width="499" height="41" alt="ok" src="https://github.com/user-attachments/assets/439899c7-566b-4ac0-81f6-03fce8ab19e9" />
 <img width="499" height="41" alt="aquecida" src="https://github.com/user-attachments/assets/b3568bf5-74ab-4ea8-b6d8-ec818068065b" />
 <img width="499" height="41" alt="critica" src="https://github.com/user-attachments/assets/f0c4a8ca-0c14-4001-9d7d-1749e21a6a4d" />
+<img width="499" height="41" alt="ligaoar" src="https://github.com/user-attachments/assets/cc45eef7-7f94-4f16-ae45-a1cc17ea34d5" />
 
 
 ---
