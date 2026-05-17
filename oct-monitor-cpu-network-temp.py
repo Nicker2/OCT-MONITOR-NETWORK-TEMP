@@ -7,7 +7,6 @@ import tkinter as tk
 from tkinter import ttk
 from tkinter import colorchooser
 import psutil
-import wmi
 import win32gui
 import win32con
 import win32api
@@ -16,12 +15,140 @@ from PIL import Image, ImageDraw, ImageFont
 import pystray
 import threading
 
+# Importações para o Auto-Downloader
+import urllib.request
+import zipfile
+import shutil
+import ssl
+
+# =====================================================================
+# AUTO-BOOTSTRAP: BAIXADOR DE DEPENDÊNCIAS VIA NUGET
+# =====================================================================
+def ensure_dependencies():
+    _base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    _lib_dir = os.path.join(_base, "lib")
+    _lhm_dll = os.path.join(_lib_dir, "LibreHardwareMonitorLib.dll")
+    
+    # Se a DLL já existe, segue o jogo imediatamente
+    if os.path.exists(_lhm_dll):
+        return _lib_dir
+        
+    # Se for um executável compilado (.exe) e a DLL não estiver lá, a compilação falhou
+    if getattr(sys, "frozen", False):
+        print("[INIT] ERRO CRÍTICO: Executável compilado sem as DLLs necessárias.")
+        return _lib_dir
+
+    print("\n[INIT] ⚠️ Dependências ausentes detectadas!")
+    print("[INIT] Conectando ao NuGet para baixar os pacotes oficiais...\n")
+    
+    PACKAGES = [
+        ("LibreHardwareMonitorLib", "0.9.4", ("lib/net8.0/LibreHardwareMonitorLib.dll",)),
+        ("HidSharp", "2.1.0", ("lib/netstandard2.0/HidSharp.dll",)),
+        ("System.Management", "9.0.0", ("lib/net8.0/System.Management.dll",)),
+        ("System.IO.Ports", "9.0.0", ("lib/net8.0/System.IO.Ports.dll",)),
+        ("Microsoft.Win32.Registry", "5.0.0", ("lib/netstandard2.0/Microsoft.Win32.Registry.dll",)),
+        ("System.IO.FileSystem.AccessControl", "5.0.0", ("lib/netstandard2.0/System.IO.FileSystem.AccessControl.dll",)),
+        ("Mono.Posix.NETStandard", "1.0.0", ("runtimes/win-x64/lib/netstandard2.0/Mono.Posix.NETStandard.dll",)),
+    ]
+    
+    if not os.path.exists(_lib_dir):
+        os.makedirs(_lib_dir)
+        
+    package_path = os.path.join(_base, "temp_pkg.nupkg")
+    
+    # Ignora certificados SSL problemáticos
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    
+    try:
+        for package_name, version, members in PACKAGES:
+            url = f"https://www.nuget.org/api/v2/package/{package_name}/{version}"
+            print(f"[INIT] Baixando pacote: {package_name} v{version}...")
+            
+            with urllib.request.urlopen(url, context=ctx) as response, open(package_path, 'wb') as out_file:
+                out_file.write(response.read())
+                
+            with zipfile.ZipFile(package_path) as archive:
+                for member in members:
+                    target = os.path.join(_lib_dir, os.path.basename(member))
+                    with open(target, "wb") as output_file:
+                        output_file.write(archive.read(member))
+                        
+        print("\n[INIT] ✅ Download e extração concluídos com sucesso via NuGet!\n")
+    except Exception as e:
+        print(f"[INIT] ❌ Erro ao baixar pacotes da Microsoft: {e}")
+    finally:
+        if os.path.exists(package_path):
+            os.remove(package_path)
+            
+    return _lib_dir
+
+# =====================================================================
+# INICIALIZAÇÃO DA PONTE COM O HARDWARE (LIBRE HARDWARE MONITOR)
+# =====================================================================
+LHM_AVAILABLE = False
+_lhm_computer = None
+
+# Garante que as dependências existem ANTES de tentar importar o C#
+lib_dir_path = ensure_dependencies()
+
+try:
+    from clr_loader import get_coreclr
+    import pythonnet
+    pythonnet.set_runtime(get_coreclr())
+    import clr
+
+    if os.path.isdir(lib_dir_path):
+        sys.path.insert(0, lib_dir_path)
+        for _asm in (
+            "System.Management",
+            "System.IO.Ports",
+            "Microsoft.Win32.Registry",
+            "System.IO.FileSystem.AccessControl",
+            "Mono.Posix.NETStandard",
+        ):
+            try: clr.AddReference(_asm)
+            except: pass
+            
+        clr.AddReference("LibreHardwareMonitorLib")
+        from LibreHardwareMonitor.Hardware import Computer, HardwareType, SensorType
+        
+        _lhm_computer = Computer()
+        _lhm_computer.IsCpuEnabled = True
+        _lhm_computer.IsMotherboardEnabled = True
+        _lhm_computer.Open()
+        LHM_AVAILABLE = True
+        print("[INIT] LibreHardwareMonitor carregado com sucesso (Modo CoreCLR).")
+    else:
+        print(f"[INIT] ERRO: Pasta 'lib' não encontrada em: {lib_dir_path}")
+except Exception as e:
+    print(f"[INIT] Aviso: LibreHardwareMonitor falhou. Erro: {e}")
+
+# Funções auxiliares para varredura de hardware
+def _walk_hardware(hw):
+    yield hw
+    for sub_hw in hw.SubHardware:
+        yield from _walk_hardware(sub_hw)
+
+def _collect_sensors(hw):
+    sensors = []
+    for node in _walk_hardware(hw):
+        try: node.Update()
+        except: pass
+        sensors.extend(node.Sensors)
+    return sensors
+
+# =====================================================================
+# CONSTANTES E CONFIGURAÇÕES
+# =====================================================================
+# (O SEU SCRIPT CONTINUA NORMALMENTE A PARTIR DAQUI)
 CONFIG_FILE = "config.json"
 MEDIA_DIR = r"C:\Windows\Media"
 
 DEFAULT_CONFIG = {
     "interface": "",
-    "sensor": "Processador (Padrão)",
+    "sensor": "Automático - Núcleo Real (LHM)",
     "sound_file": "Windows Foreground.wav",
     "reconnect_sound": "Windows Hardware Insert.wav",
     "silent_mode": False,
@@ -75,16 +202,7 @@ def get_network_interfaces():
         return []
 
 def get_temp_sensors():
-    sensors = ["Processador (Padrão)"]
-    try:
-        w = wmi.WMI(namespace="root\\wmi")
-        zones = w.MSAcpi_ThermalZoneTemperature()
-        for i, z in enumerate(zones):
-            name = z.InstanceName if hasattr(z, "InstanceName") else f"Zona {i}"
-            sensors.append(f"Zona Térmica: {name}")
-    except:
-        pass
-    return sensors
+    return ["Automático - Núcleo Real (LHM)"]
 
 def get_available_sounds():
     if os.path.exists(MEDIA_DIR):
@@ -101,23 +219,50 @@ def get_current_status(config):
         except Exception as e:
             log(f"Erro ao ler velocidade de rede: {e}")
 
-    temp = 42
-    try:
-        w = wmi.WMI(namespace="root\\wmi")
-        zones = w.MSAcpi_ThermalZoneTemperature()
-        if "Zona Térmica:" in config["sensor"]:
-            z_name = config["sensor"].replace("Zona Térmica: ", "")
-            for z in zones:
-                if getattr(z, "InstanceName", "") == z_name:
-                    temp = int((z.CurrentTemperature - 2732) / 10.0)
-                    break
-        else:
-            if zones:
-                temp = int((zones[0].CurrentTemperature - 2732) / 10.0)
-    except:
-        pass
+    temp = 45
     
-    if temp < 0 or temp > 120: temp = 45
+    # === LEITURA REAL DIRETO DO HARDWARE (VARREDURA PROFUNDA) ===
+    if LHM_AVAILABLE and _lhm_computer:
+        try:
+            all_sensors = []
+            for hw in _lhm_computer.Hardware:
+                all_sensors.extend(_collect_sensors(hw))
+            
+            ranked = []
+            fallback = []
+            
+            # Ordem de precisão de nomes de sensores de CPU
+            preferred = ("cpu package", "cpu", "package", "tctl", "tdie", "core max", "core average")
+            fallback_names = ("ccd", "core")
+            # Ignora componentes que não são o processador principal
+            reject = ("distance to tjmax", "gpu", "hot spot", "pch", "chipset", "ambient", "motherboard", "vrm", "memory", "junction")
+
+            for s in all_sensors:
+                if s.SensorType == SensorType.Temperature and s.Value is not None:
+                    lname = str(s.Name).lower()
+                    
+                    if any(r in lname for r in reject): 
+                        continue
+                    
+                    for rank, pref in enumerate(preferred):
+                        if pref in lname:
+                            ranked.append((rank, int(s.Value)))
+                            break
+                    else:
+                        if any(f in lname for f in fallback_names):
+                            fallback.append(int(s.Value))
+            
+            if ranked:
+                temp = min(ranked)[1]
+            elif fallback:
+                temp = max(fallback)
+
+        except Exception as e:
+            log(f"Erro na leitura térmica profunda LHM: {e}")
+            
+    if temp < 0 or temp > 120: 
+        temp = 45
+        
     return speed, temp
 
 def create_icon_image(temp, color_hex):
@@ -448,6 +593,11 @@ class MonitorApp:
         self.is_running = False
         try: self.icon.stop()
         except: pass
+        
+        if _lhm_computer:
+            try: _lhm_computer.Close()
+            except: pass
+            
         try:
             self.root.quit()
             self.root.destroy()
@@ -458,6 +608,11 @@ class MonitorApp:
         self.is_running = False
         try: self.icon.stop()
         except: pass
+        
+        if _lhm_computer:
+            try: _lhm_computer.Close()
+            except: pass
+            
         try:
             self.root.quit()
             self.root.destroy()
@@ -897,7 +1052,6 @@ class MonitorApp:
         ttk.Button(btn_frame, text="Salvar e Reiniciar", command=save_and_restart).pack(side="right", padx=(0, 5))
 
     def apply_text_to_canvas(self, text, bg_color, text_color):
-        # Cria uma variável interna para guardar o último texto se ela não existir
         if not hasattr(self, "last_applied_text"):
             self.last_applied_text = ""
 
@@ -912,11 +1066,10 @@ class MonitorApp:
             self.needs_scroll = True
             self.canvas.itemconfig(self.text_id, anchor="w")
             
-            # SÓ RESETA O TEXTO SE ELE FOR DIFERENTE DO ANTERIOR
             if text != self.last_applied_text:
-                self.scroll_x = 10  # <--- Agora sim! Ele nasce aqui e a animação flui livre
+                self.scroll_x = 10 
                 self.canvas.coords(self.text_id, self.scroll_x, 18)
-                self.last_applied_text = text # Atualiza o rastro do texto
+                self.last_applied_text = text 
         else:
             self.needs_scroll = False
             self.canvas.itemconfig(self.text_id, anchor="center")
@@ -949,7 +1102,6 @@ class MonitorApp:
                             winsound.PlaySound(r_path, winsound.SND_FILENAME | winsound.SND_ASYNC)
                 self.last_speed = speed
 
-                # Flags de Condição Baseadas na Realidade Física e Térmica
                 is_temp_crit = temp >= 73
                 is_temp_warn = 61 <= temp <= 72
                 is_net_down = speed == 0
@@ -961,63 +1113,52 @@ class MonitorApp:
                 text_color = self.config.get("c_tx_norm", "white")
                 trigger_alarm = False
                 
-                # === NOVA MATRIZ DE PRIORIDADES (DE CIMA PARA BAIXO) ===
-                
-                # 1. CRISES MISTAS EXTREMAS (Caos Total)
                 if is_temp_crit and is_net_down:
                     state_id = "chaos"
                     bg_color, border_color, text_color = self.config["c_bg_crit"], self.config["c_bd_crit"], self.config["c_tx_crit"]
                     messages = [f"🚨 DESCONECTADO | TEMP CRÍTICA ({temp}°C)", "🚨 LIGUE O AR CONDICIONADO", "🚨 DESLIGUE O PC POR 2 MIN", "🚨 RISCO DE DANO AO EQUIPAMENTO"]
                     trigger_alarm = True
                     
-                # 2. CRISES TÉRMICAS COM LINK LIMITADO (Caos Moderado)
                 elif is_temp_crit and is_net_slow:
                     state_id = "chaos_slow"
                     bg_color, border_color, text_color = self.config["c_bg_crit"], self.config["c_bd_crit"], self.config["c_tx_crit"]
                     messages = [f"🚨 REDE LENTA {speed}Mb", f"🚨 TEMPERATURA CRÍTICA {temp}°C", "🚨 LIGUE O AR CONDICIONADO", "🚨 RISCO DE DANO AO EQUIPAMENTO", "🚨 DESLIGUE O PC POR 2 MIN"]
                     trigger_alarm = True
                     
-                # 3. CRÍTICO: RFE / COMPONENTE SUPERTIÇADO (Risco físico ao OCT)
                 elif is_temp_crit:
                     state_id = "temp_crit"
                     bg_color, border_color, text_color = self.config["c_bg_crit"], self.config["c_bd_crit"], self.config["c_tx_crit"]
-                    messages = [f"🚨 TEMPERATURA CRÍTICA ({temp}°C)", "🚨 REDE OK 1 Gbps - RISCO DE LENTIDAO", "🚨 LIGUE O AR CONDICIONADO", "🚨 RISCO DE DANO AO EQUIPAMENTO"]
+                    messages = [f"🚨 TEMPERATURA CRÍTICA ({temp}°C)", "🚨 REDE OK - LENTIDAO NO PC", "🚨 LIGUE O AR CONDICIONADO", "🚨 RISCO DE DANO AO EQUIPAMENTO"]
                     trigger_alarm = True
                     
-                # 4. CRÍTICO: QUEDA DE INTERNET (Interrupção total do serviço)
                 elif is_net_down:
                     state_id = "net_down"
                     bg_color, border_color, text_color = self.config.get("c_bg_disc", "#0f2042"), self.config["c_bd_disc"], self.config["c_tx_norm"]
                     messages = [f"⚠️ CABO DESCONECTADO | {temp}°C", "⚠️ RECONECTE O CABO DE REDE", "⚠️ SE PERSISTIR REINICIE"]
                     trigger_alarm = True
 
-                # 5. NOVO - ALERTA MISTO: SALA QUENTE + MAU CONTATO (O seu caso de 100M)
                 elif is_temp_warn and is_net_slow:
                     state_id = "warn_mixed"
                     bg_color, border_color, text_color = self.config["c_bg_warn"], self.config["c_bd_warn"], self.config["c_tx_warn"]
                     messages = [f"⚠️ SALA AQUECIDA {temp}°C", f"⚠️ REDE LENTA {speed}Mb", "⚠️ LIGUE O AR CONDICIONADO", "⚠️ RECONECTE O CABO DE REDE", "⚠️ SE PERSISTIR REINICIE"]
                     trigger_alarm = True
                     
-                # 6. ALERTA: SALA AQUECIDA ISOLADA (Apenas calor ambiente)
                 elif is_temp_warn:
                     state_id = "warn_temp"
                     bg_color, border_color, text_color = self.config["c_bg_warn"], self.config["c_bd_warn"], self.config["c_tx_warn"]
                     messages = [f"⚠️ Sala Aquecida ({temp}°C) | Rede OK 1 Gbps", "⚠️ Considere ligar o Ar Condicionado"]
                     trigger_alarm = True
                     
-                # 7. ALERTA: REDE LIMITADA ISOLADA (Apenas mau contato estático, sem perigo térmico)
                 elif is_net_slow:
                     state_id = "warn_net_slow"
                     bg_color, border_color, text_color = self.config["c_bg_warn"], self.config["c_bd_warn"], self.config["c_tx_warn"]
                     messages = [f"⚠️ REDE LENTA {speed}Mb | Temp OK {temp}°C", "⚠️ RECONECTE O CABO DE REDE", "⚠️ SE PERSISTIR REINICIE"]
                     trigger_alarm = True
                     
-                # 8. OPERAÇÃO NORMAL
                 else:
                     state_id = "normal"
                     messages = [f"SISTEMA OK | 1 Gbps | {temp}°C"]
 
-                # Gerenciamento de ciclo de mensagens internas
                 if state_id != self.current_state_id:
                     self.current_state_id = state_id
                     self.cycle_index = 0
@@ -1052,6 +1193,17 @@ class MonitorApp:
             if self.is_running:
                 self.root.after(3000, self.update_loop)
 
+def is_admin():
+    try:
+        return ctypes.windll.shell32.IsUserAnAdmin() != 0
+    except:
+        return False
+
 if __name__ == "__main__":
+    if not is_admin():
+        print("Requisitando privilégios de Administrador...")
+        ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, f'"{os.path.abspath(__file__)}"', None, 1)
+        sys.exit()
+        
     log("=== INICIANDO SERVIÇO DE MONITORAMENTO OCT ===")
     MonitorApp()
