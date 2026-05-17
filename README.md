@@ -11,6 +11,10 @@
 Um sistema de telemetria em tempo real projetado para monitorar a **temperatura da CPU** e a **velocidade do link de rede** em ambientes clínicos, focado especificamente no equipamento **DRI OCT Triton Plus**. 
 
 Através de um display não-intrusivo ancorado nativamente na Barra de Tarefas do Windows, o sistema alerta operadores instantaneamente sobre degradações físicas ou térmicas que possam impactar o fluxo de atendimento aos pacientes.
+<img width="499" height="41" alt="ok" src="https://github.com/user-attachments/assets/439899c7-566b-4ac0-81f6-03fce8ab19e9" />
+<img width="499" height="41" alt="aquecida" src="https://github.com/user-attachments/assets/b3568bf5-74ab-4ea8-b6d8-ec818068065b" />
+<img width="499" height="41" alt="critica" src="https://github.com/user-attachments/assets/f0c4a8ca-0c14-4001-9d7d-1749e21a6a4d" />
+
 
 ---
 
