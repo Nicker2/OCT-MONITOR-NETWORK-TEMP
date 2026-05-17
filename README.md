@@ -79,7 +79,7 @@ O projeto foi construído utilizando bibliotecas nativas e de baixo nível para 
 3. **Inicie o monitor localmente:**
    *(É recomendável executar com privilégios de Administrador para leitura irrestrita da temperatura via WMI)*
    ```bash
-   python oct-monitor-network-temp.py
+   python oct-monitor-cpu-network-temp.py
    ```
 
 *(Nota: Na primeira execução inicial, clique com o botão direito no ícone verde criado perto do relógio do Windows, acesse as `Opções` e defina sua placa de rede e o sensor térmico adequado).*
