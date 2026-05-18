@@ -88,7 +88,7 @@ O projeto foi construído utilizando bibliotecas nativas e pontes de interoperab
 2. **Instale o Python e as dependências via PIP:**
    ```bash
    pip install psutil pywin32 pillow pystray pythonnet clr-loader
-```
+   ```
 
 3. **Inicie o monitor localmente:**
 *(O script baixará a pasta `lib` via NuGet e pedirá elevação UAC automaticamente)*
@@ -96,22 +96,20 @@ O projeto foi construído utilizando bibliotecas nativas e pontes de interoperab
    python oct-monitor-network-temp.py
 ```
 
-
-```
 ### Opção 2: Compilando para um Único `.exe` (Portátil)
 Para instalar na máquina da clínica sem precisar de Python instalado, você pode compilar o projeto em um executável autossuficiente que embute as DLLs baixadas.
 
 1. **Instale o PyInstaller:**
-   ```bash
+```bash
    pip install pyinstaller
 ```
 
 2. **Certifique-se de que a pasta `lib` foi baixada** rodando o script `.py` pelo menos uma vez.
+
 3. **Execute o comando de compilação empacotando a pasta `lib`:**
 ```bash
    python -m PyInstaller --onefile --noconsole --name "MonitorOCT" --add-data "lib;lib" --uac-admin oct-monitor-network-temp.py
 ```
-
 
 O seu executável portátil estará pronto dentro da pasta `dist/`.
 
