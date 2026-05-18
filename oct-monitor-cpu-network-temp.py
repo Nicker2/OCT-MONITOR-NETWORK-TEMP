@@ -149,7 +149,7 @@ MEDIA_DIR = r"C:\Windows\Media"
 DEFAULT_CONFIG = {
     "interface": "",
     "sensor": "Automático - Núcleo Real (LHM)",
-    "sound_file": "Windows Foreground.wav",
+    "sound_file": "Windows Battery Critical.wav",
     "reconnect_sound": "Windows Hardware Insert.wav",
     "silent_mode": False,
     "engine_mode": "Nativo",
@@ -909,53 +909,53 @@ class MonitorApp:
         
         # CONFIGURAÇÃO DE LINHA VERTICAL EMPILHADA: EXPLICAÇÃO + BOTÃO ABAIXO
         
-        # 1. Caos Extremo
+        # 1. Caos Extremo (CRÍTICO: >= 88°C)
         f_c1 = ttk.Frame(scroll_frame, padding=2)
         f_c1.pack(fill="x", pady=5)
         ttk.Label(f_c1, text="1. CAOS TOTAL: Temperatura em nível de queima de hardware e falta de rede simultânea.", font=("Segoe UI", 8, "italic"), foreground="gray").pack(anchor="w")
-        ttk.Button(f_c1, text="Disparar Caos Extremo (80°C + 0 Mbps)", command=lambda: trigger_sim(80, 0), width=50).pack(anchor="w", pady=2)
+        ttk.Button(f_c1, text="Disparar Caos Extremo (92°C + 0 Mbps)", command=lambda: trigger_sim(92, 0), width=50).pack(anchor="w", pady=2)
         
-        # 2. Caos Moderado
+        # 2. Caos Moderado (CRÍTICO: >= 88°C)
         f_c2 = ttk.Frame(scroll_frame, padding=2)
         f_c2.pack(fill="x", pady=5)
         ttk.Label(f_c2, text="2. CAOS MODERADO: Chip de rede fritando acima do limite, reduzindo tráfego para 100M.", font=("Segoe UI", 8, "italic"), foreground="gray").pack(anchor="w")
-        ttk.Button(f_c2, text="Disparar Caos Moderado (80°C + 100 Mbps)", command=lambda: trigger_sim(80, 100), width=50).pack(anchor="w", pady=2)
+        ttk.Button(f_c2, text="Disparar Caos Moderado (92°C + 100 Mbps)", command=lambda: trigger_sim(92, 100), width=50).pack(anchor="w", pady=2)
         
-        # 3. Temperatura Crítica Isolada
+        # 3. Temperatura Crítica Isolada (CRÍTICO: >= 88°C)
         f_c3 = ttk.Frame(scroll_frame, padding=2)
         f_c3.pack(fill="x", pady=5)
         ttk.Label(f_c3, text="3. TEMPERATURA CRÍTICA: Sala totalmente sem refrigeração. Risco térmico puro.", font=("Segoe UI", 8, "italic"), foreground="gray").pack(anchor="w")
-        ttk.Button(f_c3, text="Disparar Temp Crítica (80°C + 1000 Mbps)", command=lambda: trigger_sim(80, 1000), width=50).pack(anchor="w", pady=2)
+        ttk.Button(f_c3, text="Disparar Temp Crítica (92°C + 1000 Mbps)", command=lambda: trigger_sim(92, 1000), width=50).pack(anchor="w", pady=2)
         
-        # 4. Queda de Conectividade Isolada
+        # 4. Queda de Conectividade Isolada (NORMAL: < 76°C)
         f_c4 = ttk.Frame(scroll_frame, padding=2)
         f_c4.pack(fill="x", pady=5)
         ttk.Label(f_c4, text="4. DESCONEXÃO ABSOLUTA: Rompimento total de fiação ou switch desligado na clínica.", font=("Segoe UI", 8, "italic"), foreground="gray").pack(anchor="w")
-        ttk.Button(f_c4, text="Disparar Queda de Rede (45°C + 0 Mbps)", command=lambda: trigger_sim(45, 0), width=50).pack(anchor="w", pady=2)
+        ttk.Button(f_c4, text="Disparar Queda de Rede (55°C + 0 Mbps)", command=lambda: trigger_sim(55, 0), width=50).pack(anchor="w", pady=2)
         
-        # 5. Alerta Combinado Moderado
+        # 5. Alerta Combinado Moderado (AVISO: 76°C - 87°C)
         f_c5 = ttk.Frame(scroll_frame, padding=2)
         f_c5.pack(fill="x", pady=5)
         ttk.Label(f_c5, text="5. ALERTA MISTO: Dilatação dos pinos por sala aquecida gerando mau contato de 100M.", font=("Segoe UI", 8, "italic"), foreground="gray").pack(anchor="w")
-        ttk.Button(f_c5, text="Disparar Alerta Misto (65°C + 100 Mbps)", command=lambda: trigger_sim(65, 100), width=50).pack(anchor="w", pady=2)
+        ttk.Button(f_c5, text="Disparar Alerta Misto (82°C + 100 Mbps)", command=lambda: trigger_sim(82, 100), width=50).pack(anchor="w", pady=2)
         
-        # 6. Alerta de Temperatura Isolado
+        # 6. Alerta de Temperatura Isolado (AVISO: 76°C - 87°C)
         f_c6 = ttk.Frame(scroll_frame, padding=2)
         f_c6.pack(fill="x", pady=5)
         ttk.Label(f_c6, text="6. SALA AQUECIDA: Ar condicionado desligado, mas o cabo preserva a negociação de 1G.", font=("Segoe UI", 8, "italic"), foreground="gray").pack(anchor="w")
-        ttk.Button(f_c6, text="Disparar Sala Aquecida (65°C + 1000 Mbps)", command=lambda: trigger_sim(65, 1000), width=50).pack(anchor="w", pady=2)
+        ttk.Button(f_c6, text="Disparar Sala Aquecida (82°C + 1000 Mbps)", command=lambda: trigger_sim(82, 1000), width=50).pack(anchor="w", pady=2)
         
-        # 7. Alerta de Link Preso Isolado
+        # 7. Alerta de Link Preso Isolado (NORMAL: < 76°C)
         f_c7 = ttk.Frame(scroll_frame, padding=2)
         f_c7.pack(fill="x", pady=5)
         ttk.Label(f_c7, text="7. REDE LIMITADA: Mau contato puramente físico/mecânico no conector. Aparelho frio.", font=("Segoe UI", 8, "italic"), foreground="gray").pack(anchor="w")
-        ttk.Button(f_c7, text="Disparar Rede Limitada (45°C + 100 Mbps)", command=lambda: trigger_sim(45, 100), width=50).pack(anchor="w", pady=2)
+        ttk.Button(f_c7, text="Disparar Rede Limitada (55°C + 100 Mbps)", command=lambda: trigger_sim(55, 100), width=50).pack(anchor="w", pady=2)
         
-        # 8. Reset para Normalidade
+        # 8. Reset para Normalidade (NORMAL: < 76°C)
         f_c8 = ttk.Frame(scroll_frame, padding=2)
         f_c8.pack(fill="x", pady=5)
         ttk.Label(f_c8, text="8. SISTEMA NORMAL: Força o retorno imediato ao estado estável padrão de produção.", font=("Segoe UI", 8, "italic"), foreground="gray").pack(anchor="w")
-        ttk.Button(f_c8, text="Forçar Estado Normalizado (45°C + 1000 Mbps)", command=lambda: trigger_sim(45, 1000), width=50).pack(anchor="w", pady=2)
+        ttk.Button(f_c8, text="Forçar Estado Normalizado (55°C + 1000 Mbps)", command=lambda: trigger_sim(55, 1000), width=50).pack(anchor="w", pady=2)
         
         ttk.Separator(scroll_frame, orient="horizontal").pack(fill="x", pady=15)
         
@@ -965,7 +965,7 @@ class MonitorApp:
         f_cust.pack(fill="x", pady=5)
         
         ttk.Label(f_cust, text="Temp (°C):").grid(row=0, column=0, sticky="w", pady=2)
-        sim_temp_var_sim = tk.StringVar(value="75")
+        sim_temp_var_sim = tk.StringVar(value="85")
         ttk.Entry(f_cust, textvariable=sim_temp_var_sim, width=15).grid(row=0, column=1, sticky="w", pady=2, padx=5)
         
         ttk.Label(f_cust, text="Rede (Mbps):").grid(row=1, column=0, sticky="w", pady=2)
