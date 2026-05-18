@@ -1102,8 +1102,9 @@ class MonitorApp:
                             winsound.PlaySound(r_path, winsound.SND_FILENAME | winsound.SND_ASYNC)
                 self.last_speed = speed
 
-                is_temp_crit = temp >= 73
-                is_temp_warn = 61 <= temp <= 72
+                # Flags de Condição Baseadas na Realidade Física e Térmica
+                is_temp_crit = temp >= 88
+                is_temp_warn = 76 <= temp <= 87
                 is_net_down = speed == 0
                 is_net_slow = 0 < speed < 1000
                 
@@ -1116,19 +1117,19 @@ class MonitorApp:
                 if is_temp_crit and is_net_down:
                     state_id = "chaos"
                     bg_color, border_color, text_color = self.config["c_bg_crit"], self.config["c_bd_crit"], self.config["c_tx_crit"]
-                    messages = [f"🚨 DESCONECTADO | TEMP CRÍTICA ({temp}°C)", "🚨 LIGUE O AR CONDICIONADO", "🚨 DESLIGUE O PC POR 2 MIN", "🚨 RISCO DE DANO AO EQUIPAMENTO"]
+                    messages = [f"🚨 DESCONECTADO | TEMP CRÍTICA ({temp}°C)", f"🚨 LIGUE O AR CONDICIONADO ({temp}°C)", "🚨 DESLIGUE O PC POR 2 MIN", "🚨 RISCO DE DANO AO EQUIPAMENTO"]
                     trigger_alarm = True
                     
                 elif is_temp_crit and is_net_slow:
                     state_id = "chaos_slow"
                     bg_color, border_color, text_color = self.config["c_bg_crit"], self.config["c_bd_crit"], self.config["c_tx_crit"]
-                    messages = [f"🚨 REDE LENTA {speed}Mb", f"🚨 TEMPERATURA CRÍTICA {temp}°C", "🚨 LIGUE O AR CONDICIONADO", "🚨 RISCO DE DANO AO EQUIPAMENTO", "🚨 DESLIGUE O PC POR 2 MIN"]
+                    messages = [f"🚨 REDE LENTA {speed}Mb", f"🚨 TEMPERATURA CRÍTICA {temp}°C", f"🚨 LIGUE O AR CONDICIONADO ({temp}°C)", "🚨 RISCO DE DANO AO EQUIPAMENTO", "🚨 DESLIGUE O PC POR 2 MIN"]
                     trigger_alarm = True
                     
                 elif is_temp_crit:
                     state_id = "temp_crit"
                     bg_color, border_color, text_color = self.config["c_bg_crit"], self.config["c_bd_crit"], self.config["c_tx_crit"]
-                    messages = [f"🚨 TEMPERATURA CRÍTICA ({temp}°C)", f"🚨 REDE OK 1Gbps - LENTIDAO {temp}°C", "🚨 LIGUE O AR CONDICIONADO", "🚨 RISCO DE DANO AO EQUIPAMENTO"]
+                    messages = [f"🚨 TEMPERATURA CRÍTICA ({temp}°C)", f"🚨 REDE OK 1Gbps - LENTIDAO {temp}°C", f"🚨 LIGUE O AR CONDICIONADO ({temp}°C)", "🚨 RISCO DE DANO AO EQUIPAMENTO"]
                     trigger_alarm = True
                     
                 elif is_net_down:
@@ -1140,13 +1141,13 @@ class MonitorApp:
                 elif is_temp_warn and is_net_slow:
                     state_id = "warn_mixed"
                     bg_color, border_color, text_color = self.config["c_bg_warn"], self.config["c_bd_warn"], self.config["c_tx_warn"]
-                    messages = [f"⚠️ SALA AQUECIDA {temp}°C", f"⚠️ REDE LENTA {speed}Mb", "⚠️ LIGUE O AR CONDICIONADO", "⚠️ RECONECTE O CABO DE REDE", "⚠️ SE PERSISTIR REINICIE"]
+                    messages = [f"⚠️ SALA AQUECIDA {temp}°C", f"⚠️ REDE LENTA {speed}Mb", f"⚠️ LIGUE O AR CONDICIONADO {temp}°C", "⚠️ RECONECTE O CABO DE REDE", "⚠️ SE PERSISTIR REINICIE"]
                     trigger_alarm = True
                     
                 elif is_temp_warn:
                     state_id = "warn_temp"
                     bg_color, border_color, text_color = self.config["c_bg_warn"], self.config["c_bd_warn"], self.config["c_tx_warn"]
-                    messages = [f"⚠️ Sala Aquecida ({temp}°C) | Rede OK 1 Gbps", "⚠️ Considere ligar o Ar Condicionado"]
+                    messages = [f"⚠️ Sala aquecida ({temp}°C) | REDE OK 1 Gbps", f"⚠️ Considere ligar o ar condicionado {temp}°C", f"⚠️ O CALOR DA SALA CAUSA LENTIDÃO NOS EXAMES ({temp}°C)", f"        ⚠️ EVITE FILAS: RESFRIE A SALA DO OCT ({temp}°C)"]
                     trigger_alarm = True
                     
                 elif is_net_slow:
