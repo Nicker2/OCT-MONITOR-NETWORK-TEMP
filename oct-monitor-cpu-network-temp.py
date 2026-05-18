@@ -1128,7 +1128,7 @@ class MonitorApp:
                 elif is_temp_crit:
                     state_id = "temp_crit"
                     bg_color, border_color, text_color = self.config["c_bg_crit"], self.config["c_bd_crit"], self.config["c_tx_crit"]
-                    messages = [f"🚨 TEMPERATURA CRÍTICA ({temp}°C)", f"🚨 REDE OK 1Gbps - LENTIDAO NO PC ({temp}°C)", "🚨 LIGUE O AR CONDICIONADO", "🚨 RISCO DE DANO AO EQUIPAMENTO"]
+                    messages = [f"🚨 TEMPERATURA CRÍTICA ({temp}°C)", f"🚨 REDE OK 1Gbps - LENTIDAO {temp}°C", "🚨 LIGUE O AR CONDICIONADO", "🚨 RISCO DE DANO AO EQUIPAMENTO"]
                     trigger_alarm = True
                     
                 elif is_net_down:
