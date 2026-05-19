@@ -4,7 +4,7 @@
   <img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
   <img src="https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows" />
   <img src="https://img.shields.io/badge/Tkinter-4B8BBE?style=for-the-badge&logo=python&logoColor=white" alt="Tkinter" />
-  <img src="https://img.shields.io/badge/.NET_Core-512BD4?style=for-the-badge&logo=dotnet&logoColor=white" alt=".NET Core" />
+  <img src="https://img.shields.io/badge/Win32_API-4D4D4D?style=for-the-badge&logo=c%2B%2B&logoColor=white" alt="Win32 API" />
   <img src="https://img.shields.io/badge/PyInstaller-1F425F?style=for-the-badge&logo=python&logoColor=white" alt="PyInstaller" />
 </div>
 
@@ -44,13 +44,15 @@ Em vez de exibir logs complexos, o sistema traduz a falha em **instruções oper
 
 * **🔄 Exibição Estática Cíclica:** Mensagens de emergência são fatiadas em blocos curtos que rotacionam na tela. Isso garante leitura imediata pelo técnico, sem precisar esperar o texto rolar horizontalmente.
 
-* **🧠 Auto-Bootstrap de Dependências:** O script detecta ausência de bibliotecas essenciais e conecta-se automaticamente à API do NuGet para baixar e extrair dependências (DLLs), garantindo inicialização sem erros em ambientes limpos.
+* **🧠 Auto-Bootstrap do Motor Térmico:** O script não exige instalações prévias. Ele faz o download do pacote oficial portátil do *Core Temp* em modo silencioso, configura seu arquivo `.ini` para invisibilidade total e o gerencia como um serviço de background.
 
-* **🔥 Leitura em Nível de Kernel:** Abandona o WMI impreciso do Windows para utilizar a `LibreHardwareMonitorLib` via `pythonnet`, buscando as temperaturas reais (`Tctl`, `Core Max`) diretamente no silício da CPU.
+* **🔥 Leitura em Nível de Kernel (Memória RAM):** Abandona o WMI impreciso do Windows. O monitor utiliza a biblioteca nativa `ctypes` para se conectar diretamente ao *Shared Memory Block* (64-bits) do Core Temp, buscando as temperaturas reais diretamente do silício da CPU.
 
-* **🛡️ Elevação Automática (UAC):** Solicita privilégios de administrador autonomamente caso iniciado sem as devidas permissões para acesso aos sensores de hardware.
+* **🛡️ Elevação Automática (UAC):** Solicita privilégios de administrador autonomamente (`IsUserAnAdmin`) para garantir o acesso seguro à memória RAM na inicialização.
 
 * **🕹️ Simulador de Crise Embutido:** Interface de desenvolvimento (Aba de Testes) para forçar falhas térmicas e gargalos de rede virtualmente, ideal para validar reações e treinar equipes.
+
+* **📊 Auditoria Silenciosa:** Gera um dossiê clínico (`relatorio_oct.csv`) documentando o status da rede e temperatura a cada ciclo de atualização para entrega à diretoria ou TI.
 
 ---
 
@@ -69,15 +71,15 @@ O algoritmo reage de forma autônoma às seguintes combinações térmicas e de 
 
 ## ⚙️ Stack Tecnológica
 
-O projeto foi construído utilizando bibliotecas nativas e pontes de interoperabilidade para máxima precisão no ecossistema Windows:
+O projeto foi construído utilizando bibliotecas nativas para máxima performance, leveza e precisão no ecossistema Windows:
 
 * **Python 3.x:** Lógica central e orquestração.
-* **Pythonnet & clr-loader:** Ponte de comunicação permitindo que o Python execute bibliotecas C# (.NET Core).
-* **LibreHardwareMonitorLib:** Biblioteca open-source em C# com acesso Ring 0 aos sensores da placa-mãe.
+* **Core Temp (Motor C++):** Motor térmico Ring 0 acionado silenciosamente em segundo plano para extração de dados brutos dos registradores da Intel/AMD.
+* **Win32 API (`ctypes` / `kernel32`):** Mapeamento direto de memória RAM (`OpenFileMappingW`, `MapViewOfFile`) com ponteiros de 64-bits.
 * **PyWin32 (`win32gui`, `win32con`):** Manipulação profunda da API do Windows para injeção de interface na barra de tarefas.
-* **PSUtil:** Monitoramento em tempo real dos adaptadores de rede.
-* **Tkinter & Pillow (PIL):** Renderização da interface holográfica e ícones dinâmicos do Systray.
-* **Pystray:** Gerenciamento silencioso na bandeja do sistema.
+* **PSUtil:** Monitoramento em tempo real da velocidade do adaptador Ethernet.
+* **Tkinter & Pillow (PIL):** Renderização da interface holográfica e geração de ícones dinâmicos.
+* **Pystray:** Gerenciamento silencioso de menus na bandeja do sistema.
 
 ---
 
@@ -87,32 +89,37 @@ O projeto foi construído utilizando bibliotecas nativas e pontes de interoperab
 1. **Baixe os arquivos deste repositório.**
 2. **Instale o Python e as dependências via PIP:**
    ```bash
-   pip install psutil pywin32 pillow pystray pythonnet clr-loader
+   pip install psutil pywin32 pillow pystray
    ```
 
 3. **Inicie o monitor localmente:**
-*(O script baixará a pasta `lib` via NuGet e pedirá elevação UAC automaticamente)*
-```bash
+*(O script fará o bootstrap do Core Temp e pedirá elevação UAC automaticamente)*
+
+   ```bash
    python oct-monitor-network-temp.py
-```
+   ```
 
 ### Opção 2: Compilando para um Único `.exe` (Portátil)
-Para instalar na máquina da clínica sem precisar de Python instalado, você pode compilar o projeto em um executável autossuficiente que embute as DLLs baixadas.
+
+Para instalar na máquina da clínica sem precisar do Python instalado, você pode compilar o projeto em um executável autossuficiente. O executável já nascerá exigindo permissões administrativas.
 
 1. **Instale o PyInstaller:**
+
 ```bash
    pip install pyinstaller
+
 ```
 
-2. **Certifique-se de que a pasta `lib` foi baixada** rodando o script `.py` pelo menos uma vez.
+2. **Execute o comando de compilação:**
 
-3. **Execute o comando de compilação empacotando a pasta `lib`:**
 ```bash
-   python -m PyInstaller --onefile --noconsole --name "MonitorOCT" --add-data "lib;lib" --uac-admin oct-monitor-network-temp.py
+   python -m PyInstaller --onefile --noconsole --name "MonitorOCT" --uac-admin oct-monitor-network-temp.py
 ```
 
 O seu executável portátil estará pronto dentro da pasta `dist/`.
 
 ---
-> **Disclaimer:** Desenvolvido para otimização de infraestrutura clínica. Este software não substitui a manutenção preventiva e periódica do equipamento DRI OCT Triton Plus.
+
+> **Disclaimer:** Desenvolvido para otimização de infraestrutura clínica. Este software atua como ferramenta de telemetria e não substitui a manutenção preventiva e periódica do equipamento DRI OCT Triton Plus ou revisões térmicas do hardware.
+
 ```
