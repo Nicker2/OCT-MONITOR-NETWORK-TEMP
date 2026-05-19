@@ -121,5 +121,3 @@ O seu executável portátil estará pronto dentro da pasta `dist/`.
 ---
 
 > **Disclaimer:** Desenvolvido para otimização de infraestrutura clínica. Este software atua como ferramenta de telemetria e não substitui a manutenção preventiva e periódica do equipamento DRI OCT Triton Plus ou revisões térmicas do hardware.
-
-```
