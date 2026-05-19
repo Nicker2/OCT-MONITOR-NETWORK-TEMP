@@ -156,20 +156,20 @@ def ensure_coretemp_running():
     return False
 
 def terminate_coretemp():
-    for proc in psutil.process_iter(['name']):
-        try:
-            if "core temp" in proc.info['name'].lower() or "coretemp" in proc.info['name'].lower():
-                proc.kill()
-        except: pass
+    # Marretada nativa do Windows (Morte instantânea sem engasgar o Python)
+    os.system('taskkill /f /im "Core Temp.exe" /t >nul 2>&1')
+    os.system('taskkill /f /im "CoreTemp64.exe" /t >nul 2>&1')
 
 ensure_coretemp()
 ensure_coretemp_running()
 
 # =====================================================================
-# AUDITORIA E LOG (EXCEL/CSV)
+# AUDITORIA E LOG (EXCEL/CSV ROTATIVO)
 # =====================================================================
 def log_telemetry(speed, temp, load):
-    csv_path = os.path.join(_base, "relatorio_oct.csv")
+    ano, semana, _ = datetime.now().isocalendar()
+    nome_arquivo = f"relatorio_oct_{ano}_Sem_{semana}.csv"
+    csv_path = os.path.join(_base, nome_arquivo)
     write_header = not os.path.exists(csv_path)
 
     if speed >= 1000 and temp < 75:
@@ -254,7 +254,7 @@ def get_available_sounds():
     return []
 
 # =====================================================================
-# LEITURA TÉRMICA DIRETA DA MEMÓRIA DO WINDOWS (COM PROTEÇÃO 64-BITS)
+# LEITURA TÉRMICA DIRETA DA MEMÓRIA DO WINDOWS (PROTEÇÃO 64-BITS)
 # =====================================================================
 def get_current_status(config):
     speed = 0 
@@ -270,7 +270,7 @@ def get_current_status(config):
     load = 0
     
     try:
-        # A CURA DO SEGFAULT: Ensinando o Python a ler endereços de 64-bits
+        # Ensinando o Python a ler endereços de 64-bits (Evita Segfault / Morte Súbita)
         kernel32 = ctypes.windll.kernel32
         kernel32.OpenFileMappingW.restype = ctypes.c_void_p
         kernel32.MapViewOfFile.restype = ctypes.c_void_p
@@ -291,7 +291,6 @@ def get_current_status(config):
         if not hMap:
             raise Exception("Sensores não expostos na RAM (Aguardando o motor ligar...)")
             
-        # Agora o pBuf volta inteiro, sem ser mutilado pelo Python!
         pBuf = kernel32.MapViewOfFile(hMap, FILE_MAP_READ, 0, 0, 0)
         
         if not pBuf:
@@ -318,7 +317,6 @@ def get_current_status(config):
         kernel32.CloseHandle(hMap)
             
     except Exception as e:
-        # Removi o "log()" vermelho daqui para não ficar floodando a sua tela a cada 3s caso demore a conectar
         pass
         
     return speed, temp, load
@@ -1167,10 +1165,11 @@ def is_admin():
 if __name__ == "__main__":
     import signal
     
-    if not is_admin():
-        print("[!] Requisitando privilégios de Administrador...")
-        ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, f'"{os.path.abspath(__file__)}"', None, 1)
-        sys.exit()
+    # ATENÇÃO: BLÓCO DE UAC COMENTADO PARA TESTES LOCAIS SEM TELA DE ADMINISTRADOR
+    # if not is_admin():
+    #     print("[!] Requisitando privilégios de Administrador...")
+    #     ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, f'"{os.path.abspath(__file__)}"', None, 1)
+    #     sys.exit()
 
     def handle_sigint(sig, frame):
         print("\n[!] Ctrl+C detectado no console! Forçando encerramento...")
