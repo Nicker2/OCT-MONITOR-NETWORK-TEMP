@@ -14,141 +14,193 @@ import winsound
 from PIL import Image, ImageDraw, ImageFont
 import pystray
 import threading
-
-# Importações para o Auto-Downloader
+import subprocess
 import urllib.request
 import zipfile
-import shutil
-import ssl
+import csv
+from datetime import datetime
 
 # =====================================================================
-# AUTO-BOOTSTRAP: BAIXADOR DE DEPENDÊNCIAS VIA NUGET
+# FUNÇÕES E DIRETÓRIOS BASE
 # =====================================================================
-def ensure_dependencies():
-    _base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
-    _lib_dir = os.path.join(_base, "lib")
-    _lhm_dll = os.path.join(_lib_dir, "LibreHardwareMonitorLib.dll")
-    
-    # Se a DLL já existe, segue o jogo imediatamente
-    if os.path.exists(_lhm_dll):
-        return _lib_dir
-        
-    # Se for um executável compilado (.exe) e a DLL não estiver lá, a compilação falhou
-    if getattr(sys, "frozen", False):
-        print("[INIT] ERRO CRÍTICO: Executável compilado sem as DLLs necessárias.")
-        return _lib_dir
+def log(message):
+    timestamp = time.strftime("%H:%M:%S")
+    print(f"[{timestamp}] {message}")
+    sys.stdout.flush()
 
-    print("\n[INIT] ⚠️ Dependências ausentes detectadas!")
-    print("[INIT] Conectando ao NuGet para baixar os pacotes oficiais...\n")
-    
-    PACKAGES = [
-        ("LibreHardwareMonitorLib", "0.9.4", ("lib/net8.0/LibreHardwareMonitorLib.dll",)),
-        ("HidSharp", "2.1.0", ("lib/netstandard2.0/HidSharp.dll",)),
-        ("System.Management", "9.0.0", ("lib/net8.0/System.Management.dll",)),
-        ("System.IO.Ports", "9.0.0", ("lib/net8.0/System.IO.Ports.dll",)),
-        ("Microsoft.Win32.Registry", "5.0.0", ("lib/netstandard2.0/Microsoft.Win32.Registry.dll",)),
-        ("System.IO.FileSystem.AccessControl", "5.0.0", ("lib/netstandard2.0/System.IO.FileSystem.AccessControl.dll",)),
-        ("Mono.Posix.NETStandard", "1.0.0", ("runtimes/win-x64/lib/netstandard2.0/Mono.Posix.NETStandard.dll",)),
+_base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+_ct_dir = os.path.join(_base, "lib_coretemp")
+_ct_exe = os.path.join(_ct_dir, "Core Temp.exe")
+_ct_ini = os.path.join(_ct_dir, "CoreTemp.ini")
+
+# =====================================================================
+# ESTRUTURA C++ DO CORE TEMP (Ponte Direta para a Memória RAM)
+# =====================================================================
+class CoreTempSharedDataEx(ctypes.Structure):
+    _fields_ = [
+        ("uiLoad", ctypes.c_uint * 256),
+        ("uiTjMax", ctypes.c_uint * 128),
+        ("uiCoreCnt", ctypes.c_uint),
+        ("uiCPUCnt", ctypes.c_uint),
+        ("fTemp", ctypes.c_float * 256),
+        ("fVID", ctypes.c_float),
+        ("fCPUSpeed", ctypes.c_float),
+        ("fFSBSpeed", ctypes.c_float),
+        ("fMultiplier", ctypes.c_float),
+        ("sCPUName", ctypes.c_char * 100),
+        ("ucFahrenheit", ctypes.c_ubyte),
+        ("ucDeltaToTjMax", ctypes.c_ubyte),
+        ("ucTdpSupported", ctypes.c_ubyte),
+        ("ucPowerSupported", ctypes.c_ubyte),
+        ("uiStructVersion", ctypes.c_uint),
+        ("uiTdp", ctypes.c_uint * 128),
+        ("fPower", ctypes.c_float * 128),
+        ("fMultipliers", ctypes.c_float * 256),
     ]
-    
-    if not os.path.exists(_lib_dir):
-        os.makedirs(_lib_dir)
+
+# =====================================================================
+# GERENCIADOR DO CORE TEMP (DOWNLOAD, INI E WATCHDOG)
+# =====================================================================
+def ensure_coretemp():
+    global _ct_exe
+    if not os.path.exists(_ct_dir):
+        os.makedirs(_ct_dir)
+
+    if not os.path.exists(_ct_exe) and not os.path.exists(os.path.join(_ct_dir, "CoreTemp64.exe")):
+        print("\n[INIT] ⚠️ Core Temp não encontrado. Baixando motor térmico...")
+        url = "https://www.alcpu.com/CoreTemp/CoreTemp64.zip"
+        zip_path = os.path.join(_ct_dir, "coretemp.zip")
         
-    package_path = os.path.join(_base, "temp_pkg.nupkg")
-    
-    # Ignora certificados SSL problemáticos
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
-    
-    try:
-        for package_name, version, members in PACKAGES:
-            url = f"https://www.nuget.org/api/v2/package/{package_name}/{version}"
-            print(f"[INIT] Baixando pacote: {package_name} v{version}...")
-            
-            with urllib.request.urlopen(url, context=ctx) as response, open(package_path, 'wb') as out_file:
+        try:
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'}
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req) as response, open(zip_path, 'wb') as out_file:
                 out_file.write(response.read())
+            
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(_ct_dir)
                 
-            with zipfile.ZipFile(package_path) as archive:
-                for member in members:
-                    target = os.path.join(_lib_dir, os.path.basename(member))
-                    with open(target, "wb") as output_file:
-                        output_file.write(archive.read(member))
-                        
-        print("\n[INIT] ✅ Download e extração concluídos com sucesso via NuGet!\n")
-    except Exception as e:
-        print(f"[INIT] ❌ Erro ao baixar pacotes da Microsoft: {e}")
-    finally:
-        if os.path.exists(package_path):
-            os.remove(package_path)
-            
-    return _lib_dir
+            os.remove(zip_path)
+            print("[INIT] ✅ Core Temp baixado e extraído com sucesso!")
+        except Exception as e:
+            print(f"[INIT] ❌ Erro ao baixar o Core Temp: {e}")
+            return False
 
-# =====================================================================
-# INICIALIZAÇÃO DA PONTE COM O HARDWARE (LIBRE HARDWARE MONITOR)
-# =====================================================================
-LHM_AVAILABLE = False
-_lhm_computer = None
+    if os.path.exists(os.path.join(_ct_dir, "CoreTemp64.exe")):
+        _ct_exe = os.path.join(_ct_dir, "CoreTemp64.exe")
+    elif os.path.exists(os.path.join(_ct_dir, "Core Temp.exe")):
+        _ct_exe = os.path.join(_ct_dir, "Core Temp.exe")
 
-# Garante que as dependências existem ANTES de tentar importar o C#
-lib_dir_path = ensure_dependencies()
+    ini_content = """[Advanced]
+BusClk=0;
+ShowDTJ=0;
+SnmpSharedMemory=1;
 
-try:
-    from clr_loader import get_coreclr
-    import pythonnet
-    pythonnet.set_runtime(get_coreclr())
-    import clr
+[Display]
+CloseToSystray=0;
+Fahr=0;
+HideTaskbarButton=1;
+LabelColor=FF000000;
+Minimized=1;
+StatusColor=0000C0FF,000000FF;
+TextColor=FF000000;
 
-    if os.path.isdir(lib_dir_path):
-        sys.path.insert(0, lib_dir_path)
-        for _asm in (
-            "System.Management",
-            "System.IO.Ports",
-            "Microsoft.Win32.Registry",
-            "System.IO.FileSystem.AccessControl",
-            "Mono.Posix.NETStandard",
-        ):
-            try: clr.AddReference(_asm)
-            except: pass
-            
-        clr.AddReference("LibreHardwareMonitorLib")
-        from LibreHardwareMonitor.Hardware import Computer, HardwareType, SensorType
-        
-        _lhm_computer = Computer()
-        _lhm_computer.IsCpuEnabled = True
-        _lhm_computer.IsMotherboardEnabled = True
-        _lhm_computer.Open()
-        LHM_AVAILABLE = True
-        print("[INIT] LibreHardwareMonitor carregado com sucesso (Modo CoreCLR).")
-    else:
-        print(f"[INIT] ERRO: Pasta 'lib' não encontrada em: {lib_dir_path}")
-except Exception as e:
-    print(f"[INIT] Aviso: LibreHardwareMonitor falhou. Erro: {e}")
+[General]
+AutoUpdateCheck=0;
+EnLog=0;
+LogInt=10;
+Plugins=1;
+ReadInt=1000;
+SingleInstance=1;
 
-# Funções auxiliares para varredura de hardware
-def _walk_hardware(hw):
-    yield hw
-    for sub_hw in hw.SubHardware:
-        yield from _walk_hardware(sub_hw)
+[Misc]
+AlwaysOnTop=0;
+MiniMode=0;
+TjMaxOffset=0;
+Version=0;
 
-def _collect_sensors(hw):
-    sensors = []
-    for node in _walk_hardware(hw):
-        try: node.Update()
+[System tray]
+SystrayDisplayEffectiveFrequency=0;
+SystrayDisplayFrequency=0;
+SystrayDisplayLoad=0;
+SystrayDisplayPower=0;
+SystrayDisplayRam=0;
+SystrayOption=0;
+SystrayTransparentBack=1;
+
+[UI]
+DarkMode=1;
+"""
+    try:
+        with open(_ct_ini, "w") as f:
+            f.write(ini_content)
+    except: pass
+    
+    return True
+
+def ensure_coretemp_running():
+    for proc in psutil.process_iter(['name']):
+        try:
+            if "core temp" in proc.info['name'].lower() or "coretemp" in proc.info['name'].lower():
+                return True
         except: pass
-        sensors.extend(node.Sensors)
-    return sensors
+        
+    if os.path.exists(_ct_exe):
+        log(f"[CORETEMP] 🚀 Iniciando o Motor: {_ct_exe}")
+        try:
+            subprocess.Popen([_ct_exe], cwd=_ct_dir)
+            time.sleep(3) 
+            return True
+        except Exception as e:
+            log(f"[CORETEMP] ❌ ERRO ao disparar executável: {e}")
+    return False
+
+def terminate_coretemp():
+    for proc in psutil.process_iter(['name']):
+        try:
+            if "core temp" in proc.info['name'].lower() or "coretemp" in proc.info['name'].lower():
+                proc.kill()
+        except: pass
+
+ensure_coretemp()
+ensure_coretemp_running()
+
+# =====================================================================
+# AUDITORIA E LOG (EXCEL/CSV)
+# =====================================================================
+def log_telemetry(speed, temp, load):
+    csv_path = os.path.join(_base, "relatorio_oct.csv")
+    write_header = not os.path.exists(csv_path)
+
+    if speed >= 1000 and temp < 75:
+        cond, sit, act = "VERDE", "Operação Saudável", "Nenhuma ação. Fluxo normal."
+    elif speed < 1000 and temp < 75:
+        cond, sit, act = "AMARELO", "Gargalo Físico de Rede", "Máquina fria. Pressionar/Verificar cabo azul."
+    elif speed >= 1000 and temp >= 75:
+        cond, sit, act = "LARANJA", "Risco Térmico", "Concluir exame. Avaliar ar condicionado."
+    else:
+        cond, sit, act = "VERMELHO", "Colapso Térmico e de Tráfego", "Interromper exames. Desligar equipamento."
+
+    try:
+        with open(csv_path, mode="a", newline="", encoding="utf-8-sig") as f:
+            writer = csv.writer(f, delimiter=";")
+            if write_header:
+                writer.writerow(["Data", "Hora", "Temp. Max (C)", "Velocidade (Mbps)", "Uso CPU (%)", "Condicao", "Situacao", "Acao Recomendada"])
+            
+            now = datetime.now()
+            writer.writerow([now.strftime("%d/%m/%Y"), now.strftime("%H:%M:%S"), int(temp), int(speed), f"{int(load)}%", cond, sit, act])
+    except Exception as e:
+        log(f"Falha ao escrever CSV: {e}")
 
 # =====================================================================
 # CONSTANTES E CONFIGURAÇÕES
 # =====================================================================
-# (O SEU SCRIPT CONTINUA NORMALMENTE A PARTIR DAQUI)
 CONFIG_FILE = "config.json"
 MEDIA_DIR = r"C:\Windows\Media"
 
 DEFAULT_CONFIG = {
     "interface": "",
-    "sensor": "Automático - Núcleo Real (LHM)",
+    "sensor": "Core Temp (Win32 API)",
     "sound_file": "Windows Battery Critical.wav",
     "reconnect_sound": "Windows Hardware Insert.wav",
     "silent_mode": False,
@@ -170,18 +222,12 @@ DEFAULT_CONFIG = {
     "c_bd_disc": "#888888"   
 }
 
-def log(message):
-    timestamp = time.strftime("%H:%M:%S")
-    print(f"[{timestamp}] {message}")
-    sys.stdout.flush()
-
 def load_config():
     log("Carregando arquivo de configuração...")
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                config = {**DEFAULT_CONFIG, **json.load(f)}
-                return config
+                return {**DEFAULT_CONFIG, **json.load(f)}
         except Exception as e:
             log(f"Erro ao ler config.json: {e}. Usando padrão.")
             return DEFAULT_CONFIG.copy()
@@ -196,19 +242,20 @@ def save_config(config):
         log(f"Erro ao salvar configuração: {e}")
 
 def get_network_interfaces():
-    try:
-        return list(psutil.net_if_stats().keys())
-    except:
-        return []
+    try: return list(psutil.net_if_stats().keys())
+    except: return []
 
 def get_temp_sensors():
-    return ["Automático - Núcleo Real (LHM)"]
+    return ["Core Temp (Win32 API)"]
 
 def get_available_sounds():
     if os.path.exists(MEDIA_DIR):
         return [f for f in os.listdir(MEDIA_DIR) if f.lower().endswith(".wav")]
     return []
 
+# =====================================================================
+# LEITURA TÉRMICA DIRETA DA MEMÓRIA DO WINDOWS (COM PROTEÇÃO 64-BITS)
+# =====================================================================
 def get_current_status(config):
     speed = 0 
     if config["interface"]:
@@ -219,51 +266,62 @@ def get_current_status(config):
         except Exception as e:
             log(f"Erro ao ler velocidade de rede: {e}")
 
-    temp = 45
+    temp = 0
+    load = 0
     
-    # === LEITURA REAL DIRETO DO HARDWARE (VARREDURA PROFUNDA) ===
-    if LHM_AVAILABLE and _lhm_computer:
-        try:
-            all_sensors = []
-            for hw in _lhm_computer.Hardware:
-                all_sensors.extend(_collect_sensors(hw))
-            
-            ranked = []
-            fallback = []
-            
-            # Ordem de precisão de nomes de sensores de CPU
-            preferred = ("cpu package", "cpu", "package", "tctl", "tdie", "core max", "core average")
-            fallback_names = ("ccd", "core")
-            # Ignora componentes que não são o processador principal
-            reject = ("distance to tjmax", "gpu", "hot spot", "pch", "chipset", "ambient", "motherboard", "vrm", "memory", "junction")
+    try:
+        # A CURA DO SEGFAULT: Ensinando o Python a ler endereços de 64-bits
+        kernel32 = ctypes.windll.kernel32
+        kernel32.OpenFileMappingW.restype = ctypes.c_void_p
+        kernel32.MapViewOfFile.restype = ctypes.c_void_p
+        kernel32.UnmapViewOfFile.argtypes = [ctypes.c_void_p]
+        kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
 
-            for s in all_sensors:
-                if s.SensorType == SensorType.Temperature and s.Value is not None:
-                    lname = str(s.Name).lower()
-                    
-                    if any(r in lname for r in reject): 
-                        continue
-                    
-                    for rank, pref in enumerate(preferred):
-                        if pref in lname:
-                            ranked.append((rank, int(s.Value)))
-                            break
-                    else:
-                        if any(f in lname for f in fallback_names):
-                            fallback.append(int(s.Value))
-            
-            if ranked:
-                temp = min(ranked)[1]
-            elif fallback:
-                temp = max(fallback)
-
-        except Exception as e:
-            log(f"Erro na leitura térmica profunda LHM: {e}")
-            
-    if temp < 0 or temp > 120: 
-        temp = 45
+        FILE_MAP_READ = 4
+        map_name = None
+        hMap = 0
         
-    return speed, temp
+        # Testando todos os mapeamentos oficiais do Core Temp
+        for name in ["CoreTempMappingObjectEx", "Global\\CoreTempMappingObjectEx", "CoreTempMappingObject", "Global\\CoreTempMappingObject"]:
+            hMap = kernel32.OpenFileMappingW(FILE_MAP_READ, False, name)
+            if hMap:
+                map_name = name
+                break
+                
+        if not hMap:
+            raise Exception("Sensores não expostos na RAM (Aguardando o motor ligar...)")
+            
+        # Agora o pBuf volta inteiro, sem ser mutilado pelo Python!
+        pBuf = kernel32.MapViewOfFile(hMap, FILE_MAP_READ, 0, 0, 0)
+        
+        if not pBuf:
+            kernel32.CloseHandle(hMap)
+            raise Exception("Falha ao ler o bloco de memória.")
+            
+        data = CoreTempSharedDataEx.from_address(pBuf)
+        core_count = data.uiCoreCnt
+        
+        if core_count > 0:
+            temps = [data.fTemp[i] for i in range(core_count)]
+            loads = [data.uiLoad[i] for i in range(core_count)]
+            temp = max(temps)
+            load = max(loads)
+            
+            print(f"\n--- [RAIO-X RAM NATIVO] ---")
+            print(f"-> Mapa Localizado: {map_name}")
+            print(f"-> CPU: {data.sCPUName.decode('utf-8', errors='ignore').strip()}")
+            print(f"-> Núcleos: {core_count} | Temp Max: {temp:.1f}°C | Uso Max: {load}%")
+            print(f"---------------------------\n")
+            sys.stdout.flush()
+        
+        kernel32.UnmapViewOfFile(pBuf)
+        kernel32.CloseHandle(hMap)
+            
+    except Exception as e:
+        # Removi o "log()" vermelho daqui para não ficar floodando a sua tela a cada 3s caso demore a conectar
+        pass
+        
+    return speed, temp, load
 
 def create_icon_image(temp, color_hex):
     size = 64
@@ -279,7 +337,7 @@ def create_icon_image(temp, color_hex):
             continue
     if not font: font = ImageFont.load_default()
 
-    text = f"{temp}"
+    text = f"{int(temp)}"
     try:
         bbox = draw.textbbox((0, 0), text, font=font)
         w = bbox[2] - bbox[0]
@@ -307,6 +365,7 @@ class MonitorApp:
         self.sim_active_until = 0
         self.sim_temp = 45
         self.sim_speed = 1000
+        self.sim_load = 5
         
         self.muted_until = 0
         self.last_sound_time = 0
@@ -324,13 +383,10 @@ class MonitorApp:
             self.config["interface"] = interfaces[0]
             save_config(self.config)
 
-        self.print_super_logs()
-        
         hwnd_tb = win32gui.FindWindow("Shell_TrayWnd", None)
         if hwnd_tb:
             tb_rect = win32gui.GetWindowRect(hwnd_tb)
             self.banner_h = tb_rect[3] - tb_rect[1]
-            log(f"Altura dinâmica da barra capturada: {self.banner_h}px")
 
         try:
             self.hwnd = self.root.winfo_id()
@@ -350,14 +406,14 @@ class MonitorApp:
                         set_window_long = ctypes.windll.user32.SetWindowLongW
                     set_window_long(self.hwnd, -8, hwnd_tb) 
                     self.use_legacy = False
-                    log("Motor Nativo Ativo: Ancorado na Barra de Tarefas (Holograma).")
+                    log("[INIT] Motor Nativo ativado com sucesso.")
                 else:
                     raise Exception("Barra de tarefas não encontrada.")
             else:
-                raise Exception("Modo Legado forçado pelo usuário nas opções.")
+                raise Exception("Modo Legado forçado nas opções.")
                 
         except Exception as e:
-            log(f"Fallback para Motor Legado ativado: {e}")
+            log(f"[INIT] Fallback para Motor Legado ativado: {e}")
             self.use_legacy = True
             try:
                 style |= win32con.WS_EX_TOOLWINDOW
@@ -372,7 +428,7 @@ class MonitorApp:
         self.canvas.pack(fill="both", expand=True)
         
         self.font = ("Segoe UI", 11, "bold")
-        self.text_id = self.canvas.create_text(self.canvas_width/2, self.banner_h/2, text="Aguardando Bandeja do Sistema...", font=self.font, fill="white", anchor="center")
+        self.text_id = self.canvas.create_text(self.canvas_width/2, self.banner_h/2, text="Aguardando Bandeja...", font=self.font, fill="white", anchor="center")
         
         self.needs_scroll = False
         self.scroll_x = 0
@@ -401,47 +457,13 @@ class MonitorApp:
         self.update_loop()
         self.animate_marquee()
 
-    def print_super_logs(self):
-        log("=== SUPER LOGS DE DIAGNÓSTICO (RAIO-X) ===")
-        try:
-            screen_w = win32api.GetSystemMetrics(win32con.SM_CXSCREEN)
-            screen_h = win32api.GetSystemMetrics(win32con.SM_CYSCREEN)
-            log(f"[RAIO-X] Resolução da Tela Principal: {screen_w}x{screen_h}")
-            
-            hwnd_tb = win32gui.FindWindow("Shell_TrayWnd", None)
-            if hwnd_tb:
-                rect = win32gui.GetWindowRect(hwnd_tb)
-                log(f"[RAIO-X] Barra de Tarefas (Shell_TrayWnd): L:{rect[0]}, T:{rect[1]}, R:{rect[2]}, B:{rect[3]}")
-                
-                hwnd_tray = win32gui.FindWindowEx(hwnd_tb, 0, "TrayNotifyWnd", None)
-                if hwnd_tray:
-                    t_rect = win32gui.GetWindowRect(hwnd_tray)
-                    log(f"[RAIO-X] Bandeja do Sistema (TrayNotifyWnd): L:{t_rect[0]}, T:{t_rect[1]}, R:{t_rect[2]}, B:{t_rect[3]}")
-                    
-                    hwnd_clock = win32gui.FindWindowEx(hwnd_tray, 0, "TrayClockWClass", None)
-                    if hwnd_clock:
-                        c_rect = win32gui.GetWindowRect(hwnd_clock)
-                        log(f"[RAIO-X] Relógio (TrayClockWClass): L:{c_rect[0]}, T:{c_rect[1]}, R:{c_rect[2]}, B:{c_rect[3]}")
-                    else:
-                        log("[RAIO-X] Relógio (TrayClockWClass) não encontrado.")
-                else:
-                    log("[RAIO-X] Bandeja do Sistema (TrayNotifyWnd) não encontrada.")
-            else:
-                log("[RAIO-X] Barra de Tarefas (Shell_TrayWnd) não encontrada.")
-        except Exception as e:
-            log(f"[RAIO-X] Erro ao extrair logs: {e}")
-        log("==========================================")
-
     def get_absolute_target_position(self, verbose=False):
         hwnd_tb = win32gui.FindWindow("Shell_TrayWnd", None)
         if not hwnd_tb: 
-            if verbose: log("[LOG-POS] FALHA: Barra de tarefas principal (Shell_TrayWnd) não encontrada.")
             return 0, 0
             
         tb_rect = win32gui.GetWindowRect(hwnd_tb)
         mode = self.config.get("pos_mode", "Âncora Inteligente")
-        
-        if verbose: log(f"[LOG-POS] Calculando coordenadas absolutas. Modo selecionado: {mode}")
         
         if mode == "Pixels Personalizados":
             abs_x = self.config.get("abs_x", 0)
@@ -457,10 +479,6 @@ class MonitorApp:
             
             if not self.use_legacy:
                 final_y = 0 
-                if verbose: log(f"[LOG-POS] Modo Nativo: Eixo Y forçado a 0. Resultado Absoluto X: {final_x}, Y: 0")
-            else:
-                if verbose: log(f"[LOG-POS] Modo Pixels -> Origem X: {orig_x}, Origem Y: {orig_y}. Resultado Absoluto X: {final_x}, Y: {final_y}")
-                
             return final_x, final_y
             
         target_name = self.config.get("anchor_target", "Bandeja do Sistema (Systray)")
@@ -486,8 +504,6 @@ class MonitorApp:
         tgt_w = R - L
         tgt_h = B - T
         
-        if verbose: log(f"[LOG-POS] Alvo: {target_name}. Retângulo do Alvo: L:{L}, T:{T}, R:{R}, B:{B}")
-        
         base_x, base_y = 0, 0
         
         if target_name == "Barra de Tarefas (Centro)":
@@ -512,14 +528,10 @@ class MonitorApp:
             base_y = 0
             off_y = 0 
             
-        if verbose: log(f"[LOG-POS] Posição Relativa '{side}' aplicada com offsets (+{off_x}, +{off_y}) -> X: {base_x + off_x}, Y: {base_y + off_y}")
         return base_x + off_x, base_y + off_y
 
     def apply_position(self, verbose=False, force=False):
             try:
-                if verbose: log("--- INICIANDO APLICAÇÃO DE POSIÇÃO ---")
-                
-                # 1. Checagem e Atualização da Altura (Para NATIVO e LEGADO)
                 hwnd_tb = win32gui.FindWindow("Shell_TrayWnd", None)
                 if hwnd_tb:
                     tb_rect = win32gui.GetWindowRect(hwnd_tb)
@@ -528,55 +540,35 @@ class MonitorApp:
                         self.banner_h = new_h
                         self.canvas.config(height=self.banner_h)
                         self.canvas.coords(self.text_id, self.canvas_width/2, self.banner_h/2)
-                        if verbose: log(f"[LOG-POS] Altura da barra atualizada para: {self.banner_h}px")
 
-                # 2. Captura do Alvo
                 abs_x, abs_y = self.get_absolute_target_position(verbose)
                 
-                # 3. Atualização Interna do Tkinter
                 new_geo = f"{self.banner_w}x{self.banner_h}+{abs_x}+{abs_y}"
                 geo_changed = (self.root.geometry() != new_geo)
                 
-                # Atualiza o Tkinter e FORÇA ele a registrar a posição na mesma hora
                 if geo_changed:
                     self.root.geometry(new_geo)
-                    self.root.update_idletasks() # Impede o Tkinter de usar cache antigo
+                    self.root.update_idletasks() 
                     
-                # 4. Motor de Posicionamento Final
                 if not self.use_legacy:
-                    # === MODO NATIVO ===
-                    if verbose: log(f"[LOG-POS] Modo Nativo. Aplicando coordenadas absolutas (Y forçado a 0) -> X:{abs_x}, Y:0")
-                    
-                    # O deiconify vem ANTES da marretada do Win32 para evitar pulos
                     if self.root.state() == "withdrawn":
                         self.root.deiconify()
-                    
-                    if verbose: log(f"[LOG-POS] Disparando SetWindowPos com X:{abs_x}, Y:0")
                     try: 
                         win32gui.SetWindowPos(self.hwnd, 0, abs_x, 0, self.banner_w, self.banner_h, win32con.SWP_NOZORDER | win32con.SWP_NOACTIVATE)
-                    except Exception as e: 
-                        log(f"[LOG-POS] Erro SetWindowPos: {e}")
-                    
+                    except: pass
                 else:
-                    # === MODO LEGADO ===
-                    if verbose: log(f"[LOG-POS] Modo Legado ativo. Aplicando coordenadas absolutas -> X:{abs_x}, Y:{abs_y}")
-                    
                     if self.root.state() == "withdrawn":
                         self.root.deiconify()
                         
                     self.root.lift()
                     self.root.attributes("-topmost", True)
                     
-                    # No Legado, mantemos a trava do geo_changed pra não fazer a tela piscar à toa
                     if geo_changed or force or verbose:
                         try: 
                             win32gui.SetWindowPos(self.hwnd, win32con.HWND_TOPMOST, abs_x, abs_y, self.banner_w, self.banner_h, win32con.SWP_SHOWWINDOW | win32con.SWP_NOACTIVATE)
-                        except: 
-                            pass
-                            
-                if verbose: log("----------------------------------------")
+                        except: pass
             except Exception as e:
-                log(f"Erro ao aplicar posição: {e}")
+                pass
 
     def create_menu(self):
         return pystray.Menu(
@@ -591,13 +583,9 @@ class MonitorApp:
 
     def restart(self):
         self.is_running = False
+        print("\n[!] Reiniciando Monitor OCT...")
         try: self.icon.stop()
         except: pass
-        
-        if _lhm_computer:
-            try: _lhm_computer.Close()
-            except: pass
-            
         try:
             self.root.quit()
             self.root.destroy()
@@ -606,17 +594,12 @@ class MonitorApp:
 
     def terminate(self):
         self.is_running = False
-        try: self.icon.stop()
-        except: pass
-        
-        if _lhm_computer:
-            try: _lhm_computer.Close()
-            except: pass
-            
+        print("\n[!] Encerrando Monitor OCT e limpando processos...")
         try:
-            self.root.quit()
-            self.root.destroy()
+            terminate_coretemp()
         except: pass
+        print("[!] Fechando console agora!")
+        sys.stdout.flush()
         os._exit(0)
 
     def open_options(self):
@@ -645,7 +628,6 @@ class MonitorApp:
         frame_anchor = ttk.Frame(tab_pos)
         frame_pixels_main = ttk.Frame(tab_pos)
         
-        # --- Frame Anchor ---
         ttk.Label(frame_anchor, text="Alvo (O que seguir):").grid(row=0, column=0, sticky="w", pady=5)
         cb_tgt = ttk.Combobox(frame_anchor, values=["Bandeja do Sistema (Systray)", "Relógio", "Botão Iniciar", "Barra de Tarefas (Centro)"], state="readonly", width=28)
         cb_tgt.grid(row=0, column=1, sticky="w", pady=5)
@@ -665,9 +647,6 @@ class MonitorApp:
         cb_tgt.bind("<<ComboboxSelected>>", on_anchor_change)
         cb_side.bind("<<ComboboxSelected>>", on_anchor_change)
 
-        # --- Frame Pixels Main (Campos, Ajuste Fino, Presets) ---
-        
-        # Subframe: Origens
         f_orig = ttk.Frame(frame_pixels_main)
         f_orig.pack(fill="x", pady=5)
         ttk.Label(f_orig, text="Origem X:").grid(row=0, column=0, sticky="w")
@@ -680,7 +659,6 @@ class MonitorApp:
         cb_orig_y.grid(row=0, column=3, padx=5)
         cb_orig_y.set(temp_config.get("origin_y", "Topo"))
         
-        # Subframe: Inputs Manuais
         f_inputs = ttk.Frame(frame_pixels_main)
         f_inputs.pack(fill="x", pady=5)
         ttk.Label(f_inputs, text="Posição X:").grid(row=0, column=0, sticky="w")
@@ -709,7 +687,6 @@ class MonitorApp:
         cb_orig_x.bind("<<ComboboxSelected>>", lambda e: sync_pixel_inputs())
         cb_orig_y.bind("<<ComboboxSelected>>", lambda e: sync_pixel_inputs())
 
-        # Subframe: Ajuste Fino
         f_adj = ttk.LabelFrame(frame_pixels_main, text="Ajuste Fino (Move em Tempo Real)")
         f_adj.pack(fill="x", pady=10, ipadx=5, ipady=5)
         
@@ -739,7 +716,6 @@ class MonitorApp:
         ttk.Button(f_adj, text="+10", command=lambda: move_pos(0, 10), width=4).grid(row=1, column=3, padx=2, pady=5)
         ttk.Button(f_adj, text="+50", command=lambda: move_pos(0, 50), width=4).grid(row=1, column=4, padx=2, pady=5)
 
-        # Subframe: Presets
         f_presets = ttk.LabelFrame(frame_pixels_main, text="Posições Salvas (Presets)")
         f_presets.pack(fill="x", pady=5, ipadx=5, ipady=5)
         
@@ -821,7 +797,6 @@ class MonitorApp:
                 
         ttk.Button(f_save, text="Salvar Posição Atual", command=save_preset).pack(side="left", padx=5)
 
-        # Lógica de Ocultar/Mostrar
         def update_frames(event=None):
             mode = cb_pos_mode.get()
             temp_config["pos_mode"] = mode
@@ -837,7 +812,6 @@ class MonitorApp:
         cb_pos_mode.bind("<<ComboboxSelected>>", update_frames)
         update_frames()
 
-        # Botão Aplicar Manual (Força Log)
         ttk.Separator(tab_pos, orient="horizontal").grid(row=2, column=0, columnspan=2, sticky="we", pady=5)
         ttk.Button(tab_pos, text="✅ APLICAR POSIÇÃO (FORÇAR TESTE)", command=lambda: self.apply_position(verbose=True, force=True)).grid(row=3, column=0, columnspan=2, pady=10)
 
@@ -880,11 +854,10 @@ class MonitorApp:
         cb_engine.set(temp_config.get("engine_mode", "Nativo"))
         ttk.Label(tab_defs, text="(Exige Reiniciar)").grid(row=5, column=1, sticky="e", pady=5)
         
-        # ================= ABA 3: TESTES (ORGANIZAÇÃO VERTICAL DE PRIORIDADES) =================
+        # ================= ABA 3: TESTES =================
         tab_tests = ttk.Frame(notebook, padding=15)
         notebook.add(tab_tests, text="Simulação e Testes")
         
-        # Container com rolagem para os cenários não espremerem a janela
         canvas_scroll = tk.Canvas(tab_tests, bd=0, highlightthickness=0)
         scrollbar_v = ttk.Scrollbar(tab_tests, orient="vertical", command=canvas_scroll.yview)
         scroll_frame = ttk.Frame(canvas_scroll)
@@ -907,51 +880,41 @@ class MonitorApp:
             
         ttk.Label(scroll_frame, text="Simuladores Rápidos de Carga (Duração: 15 Segundos)", font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(0, 10))
         
-        # CONFIGURAÇÃO DE LINHA VERTICAL EMPILHADA: EXPLICAÇÃO + BOTÃO ABAIXO
-        
-        # 1. Caos Extremo (CRÍTICO: >= 88°C)
         f_c1 = ttk.Frame(scroll_frame, padding=2)
         f_c1.pack(fill="x", pady=5)
         ttk.Label(f_c1, text="1. CAOS TOTAL: Temperatura em nível de queima de hardware e falta de rede simultânea.", font=("Segoe UI", 8, "italic"), foreground="gray").pack(anchor="w")
         ttk.Button(f_c1, text="Disparar Caos Extremo (92°C + 0 Mbps)", command=lambda: trigger_sim(92, 0), width=50).pack(anchor="w", pady=2)
         
-        # 2. Caos Moderado (CRÍTICO: >= 88°C)
         f_c2 = ttk.Frame(scroll_frame, padding=2)
         f_c2.pack(fill="x", pady=5)
         ttk.Label(f_c2, text="2. CAOS MODERADO: Chip de rede fritando acima do limite, reduzindo tráfego para 100M.", font=("Segoe UI", 8, "italic"), foreground="gray").pack(anchor="w")
         ttk.Button(f_c2, text="Disparar Caos Moderado (92°C + 100 Mbps)", command=lambda: trigger_sim(92, 100), width=50).pack(anchor="w", pady=2)
         
-        # 3. Temperatura Crítica Isolada (CRÍTICO: >= 88°C)
         f_c3 = ttk.Frame(scroll_frame, padding=2)
         f_c3.pack(fill="x", pady=5)
         ttk.Label(f_c3, text="3. TEMPERATURA CRÍTICA: Sala totalmente sem refrigeração. Risco térmico puro.", font=("Segoe UI", 8, "italic"), foreground="gray").pack(anchor="w")
         ttk.Button(f_c3, text="Disparar Temp Crítica (92°C + 1000 Mbps)", command=lambda: trigger_sim(92, 1000), width=50).pack(anchor="w", pady=2)
         
-        # 4. Queda de Conectividade Isolada (NORMAL: < 76°C)
         f_c4 = ttk.Frame(scroll_frame, padding=2)
         f_c4.pack(fill="x", pady=5)
         ttk.Label(f_c4, text="4. DESCONEXÃO ABSOLUTA: Rompimento total de fiação ou switch desligado na clínica.", font=("Segoe UI", 8, "italic"), foreground="gray").pack(anchor="w")
         ttk.Button(f_c4, text="Disparar Queda de Rede (55°C + 0 Mbps)", command=lambda: trigger_sim(55, 0), width=50).pack(anchor="w", pady=2)
         
-        # 5. Alerta Combinado Moderado (AVISO: 76°C - 87°C)
         f_c5 = ttk.Frame(scroll_frame, padding=2)
         f_c5.pack(fill="x", pady=5)
         ttk.Label(f_c5, text="5. ALERTA MISTO: Dilatação dos pinos por sala aquecida gerando mau contato de 100M.", font=("Segoe UI", 8, "italic"), foreground="gray").pack(anchor="w")
         ttk.Button(f_c5, text="Disparar Alerta Misto (82°C + 100 Mbps)", command=lambda: trigger_sim(82, 100), width=50).pack(anchor="w", pady=2)
         
-        # 6. Alerta de Temperatura Isolado (AVISO: 76°C - 87°C)
         f_c6 = ttk.Frame(scroll_frame, padding=2)
         f_c6.pack(fill="x", pady=5)
         ttk.Label(f_c6, text="6. SALA AQUECIDA: Ar condicionado desligado, mas o cabo preserva a negociação de 1G.", font=("Segoe UI", 8, "italic"), foreground="gray").pack(anchor="w")
         ttk.Button(f_c6, text="Disparar Sala Aquecida (82°C + 1000 Mbps)", command=lambda: trigger_sim(82, 1000), width=50).pack(anchor="w", pady=2)
         
-        # 7. Alerta de Link Preso Isolado (NORMAL: < 76°C)
         f_c7 = ttk.Frame(scroll_frame, padding=2)
         f_c7.pack(fill="x", pady=5)
         ttk.Label(f_c7, text="7. REDE LIMITADA: Mau contato puramente físico/mecânico no conector. Aparelho frio.", font=("Segoe UI", 8, "italic"), foreground="gray").pack(anchor="w")
         ttk.Button(f_c7, text="Disparar Rede Limitada (55°C + 100 Mbps)", command=lambda: trigger_sim(55, 100), width=50).pack(anchor="w", pady=2)
         
-        # 8. Reset para Normalidade (NORMAL: < 76°C)
         f_c8 = ttk.Frame(scroll_frame, padding=2)
         f_c8.pack(fill="x", pady=5)
         ttk.Label(f_c8, text="8. SISTEMA NORMAL: Força o retorno imediato ao estado estável padrão de produção.", font=("Segoe UI", 8, "italic"), foreground="gray").pack(anchor="w")
@@ -959,7 +922,6 @@ class MonitorApp:
         
         ttk.Separator(scroll_frame, orient="horizontal").pack(fill="x", pady=15)
         
-        # Bloco Customizado Mantido no Fundo para Ajustes Finos Extras
         ttk.Label(scroll_frame, text="Simulação Customizada Direta:", font=("Segoe UI", 9, "bold")).pack(anchor="w")
         f_cust = ttk.Frame(scroll_frame)
         f_cust.pack(fill="x", pady=5)
@@ -1089,10 +1051,13 @@ class MonitorApp:
             if not self.is_running: return
 
             try:
+                ensure_coretemp_running()
+
                 if time.time() < self.sim_active_until:
-                    speed, temp = self.sim_speed, self.sim_temp
+                    speed, temp, load = self.sim_speed, self.sim_temp, self.sim_load
                 else:
-                    speed, temp = get_current_status(self.config)
+                    speed, temp, load = get_current_status(self.config)
+                    log_telemetry(speed, temp, load)
                     
                 if self.last_speed == 0 and speed >= 1000:
                     now = time.time()
@@ -1102,7 +1067,6 @@ class MonitorApp:
                             winsound.PlaySound(r_path, winsound.SND_FILENAME | winsound.SND_ASYNC)
                 self.last_speed = speed
 
-                # Flags de Condição Baseadas na Realidade Física e Térmica
                 is_temp_crit = temp >= 88
                 is_temp_warn = 76 <= temp <= 87
                 is_net_down = speed == 0
@@ -1158,7 +1122,7 @@ class MonitorApp:
                     
                 else:
                     state_id = "normal"
-                    messages = [f"SISTEMA OK | 1 Gbps | {temp}°C"]
+                    messages = [f"SISTEMA OK | 1 Gbps | {temp:.1f}°C | CPU: {load}%"]
 
                 if state_id != self.current_state_id:
                     self.current_state_id = state_id
@@ -1189,7 +1153,7 @@ class MonitorApp:
                         self.last_sound_time = now
 
             except Exception as e:
-                log(f"Erro no loop principal: {e}")
+                pass
 
             if self.is_running:
                 self.root.after(3000, self.update_loop)
@@ -1201,10 +1165,22 @@ def is_admin():
         return False
 
 if __name__ == "__main__":
+    import signal
+    
     if not is_admin():
-        print("Requisitando privilégios de Administrador...")
+        print("[!] Requisitando privilégios de Administrador...")
         ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, f'"{os.path.abspath(__file__)}"', None, 1)
         sys.exit()
+
+    def handle_sigint(sig, frame):
+        print("\n[!] Ctrl+C detectado no console! Forçando encerramento...")
+        terminate_coretemp()
+        os._exit(0)
         
+    signal.signal(signal.SIGINT, handle_sigint)
+    
     log("=== INICIANDO SERVIÇO DE MONITORAMENTO OCT ===")
-    MonitorApp()
+    try:
+        MonitorApp()
+    except KeyboardInterrupt:
+        handle_sigint(None, None)
