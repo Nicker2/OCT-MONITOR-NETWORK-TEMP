@@ -36,7 +36,7 @@
 
 ## Core Temp: download, .ini e vigia
 
-- `ensure_coretemp()` cria `lib_coretemp\` ao lado do script. Se não houver `Core Temp.exe` nem `CoreTemp64.exe`, baixa `https://www.alcpu.com/CoreTemp/CoreTemp64.zip`, extrai e apaga o zip.
+- `ensure_coretemp()` cria `lib_coretemp\` na pasta do programa (`pasta_do_programa()`: a do script ou, no `.exe`, a do executável). Se não houver `Core Temp.exe` nem `CoreTemp64.exe`, baixa `https://www.alcpu.com/CoreTemp/CoreTemp64.zip`, extrai e apaga o zip.
 - Sempre regrava o `CoreTemp.ini` com a janela minimizada, sem botão na barra de tarefas, sem checagem de atualização, sem log, **memória compartilhada ligada** (`SnmpSharedMemory=1`), leitura a cada 1000 ms e instância única.
 - `ensure_coretemp_running()` roda a cada ciclo: se não houver processo com "core temp"/"coretemp" no nome, abre o executável de novo.
 - **Encerrar** (menu da bandeja) ou **Ctrl+C** no console encerram o Core Temp com `taskkill /f`.
@@ -85,11 +85,12 @@ Verificação a cada 3 s (`update_loop`), na ordem abaixo (a primeira que bate v
 | `chaos_slow` | temp ≥ 88 e 0 < velocidade < 1000 | crítico | sim |
 | `temp_crit` | temp ≥ 88 | crítico | sim |
 | `net_down` | velocidade = 0 | desconectado | sim |
-| `warn_mixed` | 76 ≤ temp ≤ 87 e 0 < velocidade < 1000 | aviso | sim |
-| `warn_temp` | 76 ≤ temp ≤ 87 | aviso | sim |
+| `warn_mixed` | 76 ≤ temp < 88 e 0 < velocidade < 1000 | aviso | sim |
+| `warn_temp` | 76 ≤ temp < 88 | aviso | sim |
 | `warn_net_slow` | 0 < velocidade < 1000 | aviso | sim |
 | `normal` | qualquer outro caso | normal | não |
 
+- As faixas vêm de `classificar_temperatura()` com as constantes `TEMP_AVISO_C = 76.0` e `TEMP_CRITICA_C = 88.0`. As comparações são contínuas (`>=`/`<`), então não há buraco entre aviso e crítico (antes da v1.1, 87,5 °C caía em "normal").
 - Cada estado tem uma lista de mensagens; a cada ciclo passa para a próxima. Ao mudar de estado, volta para a primeira.
 - O som de alerta toca no máximo uma vez a cada 30 s, se o modo silencioso estiver desligado e fora do "Mutar 5 min". Se o arquivo de som não existir, toca o bipe padrão.
 - O som de reconexão toca quando a velocidade passa de 0 para 1000 Mbps ou mais.
@@ -124,7 +125,7 @@ Gravado na pasta de trabalho atual (de onde o monitor foi aberto). Está no `.gi
 
 ## Relatório CSV
 
-- Arquivo: `relatorio_oct_<ano>_Sem_<semana ISO>.csv`, na pasta do programa, `utf-8-sig`, separador `;`.
+- Arquivo: `relatorio_oct_<ano>_Sem_<semana ISO>.csv`, na pasta do programa (a do script ou, no `.exe`, a do executável), `utf-8-sig`, separador `;`.
 - Colunas: `Data`, `Hora`, `Temp. Max (C)`, `Velocidade (Mbps)`, `Uso CPU (%)`, `Condicao`, `Situacao`, `Acao Recomendada`.
 - Uma linha por ciclo com leitura real (simulações não são gravadas).
 - A classificação do CSV é própria e usa **75 °C** como corte:
@@ -137,7 +138,7 @@ Gravado na pasta de trabalho atual (de onde o monitor foi aberto). Está no `.gi
 | `VERMELHO` | < 1000 Mbps e ≥ 75 °C | Interromper exames. Desligar equipamento. |
 
 > [!NOTE]
-> No `.exe` de arquivo único, "pasta do programa" é a pasta temporária do PyInstaller (`sys._MEIPASS`), apagada ao fechar. O mesmo vale para `lib_coretemp\`, que é baixado de novo a cada abertura.
+> Desde a v1.1, no `.exe` de arquivo único a "pasta do programa" é a pasta do `MonitorOCT.exe` (`sys.executable`), e não a temporária do PyInstaller (`sys._MEIPASS`). O CSV e o `lib_coretemp\` sobrevivem ao fechamento e o Core Temp não é baixado de novo a cada abertura. O `config.json` continua na pasta de trabalho atual.
 
 ---
 
@@ -176,7 +177,7 @@ pip install pyinstaller
 python -m PyInstaller --onefile --noconsole --name "MonitorOCT" --uac-admin oct-monitor-cpu-network-temp.py
 ```
 
-Saída em `dist\MonitorOCT.exe`. Para manter o CSV e o Core Temp numa pasta fixa, prefira `--onedir` no lugar de `--onefile`.
+Saída em `dist\MonitorOCT.exe`. Coloque o `.exe` numa pasta própria com permissão de escrita (ex.: `C:\MonitorOCT\`): o CSV e o `lib_coretemp\` são criados ali.
 
 ---
 
@@ -199,6 +200,7 @@ Capturas tiradas do PC do OCT, publicadas no README anterior:
 | :--- | :--- |
 | `oct-monitor-cpu-network-temp.py` | O monitor inteiro. |
 | `README.md`, `docs/`, `assets/` | Documentação e ilustrações. |
+| `tests/test_regras.py` | Testes das faixas de temperatura e da pasta do programa (`python -m unittest discover -s tests`), sem abrir janelas nem precisar do hardware. |
 | `LICENSE` | Licença MIT. |
 | `.gitignore` | Ignora, entre outros, `config.json`, `build/` e `dist/`. |
 

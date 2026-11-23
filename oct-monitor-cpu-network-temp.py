@@ -28,7 +28,20 @@ def log(message):
     print(f"[{timestamp}] {message}")
     sys.stdout.flush()
 
-_base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+def pasta_do_programa(frozen=None, executable=None, script=None):
+    """Pasta fixa onde ficam o CSV e o lib_coretemp.
+
+    No .exe do PyInstaller (--onefile) usa a pasta do executavel, e nao a
+    temporaria (sys._MEIPASS), que e apagada ao fechar. Pelo Python, usa a
+    pasta do script.
+    """
+    if frozen is None:
+        frozen = getattr(sys, "frozen", False)
+    if frozen:
+        return os.path.dirname(os.path.abspath(executable or sys.executable))
+    return os.path.dirname(os.path.abspath(script or __file__))
+
+_base = pasta_do_programa()
 _ct_dir = os.path.join(_base, "lib_coretemp")
 _ct_exe = os.path.join(_ct_dir, "Core Temp.exe")
 _ct_ini = os.path.join(_ct_dir, "CoreTemp.ini")
@@ -195,6 +208,19 @@ def log_telemetry(speed, temp, load):
 # =====================================================================
 # CONSTANTES E CONFIGURAÇÕES
 # =====================================================================
+# Faixas de temperatura da faixa (comparacoes continuas, sem buraco entre elas):
+#   normal: temp < 76 | aviso: 76 <= temp < 88 | critico: temp >= 88
+TEMP_AVISO_C = 76.0
+TEMP_CRITICA_C = 88.0
+
+def classificar_temperatura(temp):
+    """Retorna "crit", "warn" ou "normal" para a temperatura em graus C."""
+    if temp >= TEMP_CRITICA_C:
+        return "crit"
+    if temp >= TEMP_AVISO_C:
+        return "warn"
+    return "normal"
+
 CONFIG_FILE = "config.json"
 MEDIA_DIR = r"C:\Windows\Media"
 
@@ -1065,8 +1091,9 @@ class MonitorApp:
                             winsound.PlaySound(r_path, winsound.SND_FILENAME | winsound.SND_ASYNC)
                 self.last_speed = speed
 
-                is_temp_crit = temp >= 88
-                is_temp_warn = 76 <= temp <= 87
+                nivel_temp = classificar_temperatura(temp)
+                is_temp_crit = nivel_temp == "crit"
+                is_temp_warn = nivel_temp == "warn"
                 is_net_down = speed == 0
                 is_net_slow = 0 < speed < 1000
                 

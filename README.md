@@ -90,7 +90,7 @@ A verificação roda a cada **3 segundos**.
 | :--- | :---: | :--- | :--- |
 | ✅ **Normal** | borda verde | Cabo em 1 Gbps e CPU abaixo de 76 °C | `SISTEMA OK \| 1 Gbps \| 52.0°C \| CPU: 12%` |
 | ⚠️ **Rede lenta** | borda amarela | Cabo abaixo de 1 Gbps (ex.: 100 Mbps), CPU fria | Reconectar o cabo; se persistir, reiniciar |
-| ⚠️ **Sala aquecida** | borda amarela | CPU entre 76 °C e 87 °C | Ligar o ar-condicionado antes que o exame fique lento |
+| ⚠️ **Sala aquecida** | borda amarela | CPU de 76 °C até abaixo de 88 °C | Ligar o ar-condicionado antes que o exame fique lento |
 | ⚠️ **Aviso misto** | borda amarela | Sala aquecida **e** rede lenta | Ar-condicionado + reconectar o cabo |
 | 🔌 **Desconectado** | borda cinza | Placa de rede sem link (0 Mbps) | Reconectar o cabo; se persistir, reiniciar |
 | 🚨 **Crítico** | fundo vermelho | CPU a 88 °C ou mais (sozinha, com rede lenta ou sem rede) | Ligar o ar, desligar o PC por 2 min, risco ao equipamento |
@@ -167,7 +167,7 @@ pip install pyinstaller
 python -m PyInstaller --onefile --noconsole --name "MonitorOCT" --uac-admin oct-monitor-cpu-network-temp.py
 ```
 
-O `MonitorOCT.exe` fica em `dist\`. Copie para uma pasta só dele, por exemplo `C:\MonitorOCT\`.
+O `MonitorOCT.exe` fica em `dist\`. Copie para uma pasta só dele, por exemplo `C:\MonitorOCT\`: é nessa pasta que ficam o relatório CSV e o `lib_coretemp\`.
 
 > [!NOTE]
 > Veja em [Perguntas frequentes](#-perguntas-frequentes) onde o `.exe` de arquivo único guarda o relatório CSV.
@@ -235,15 +235,15 @@ A leitura de temperatura do próprio Windows (WMI) é imprecisa ou nem existe em
 <details>
 <summary><b>Onde fica o relatório CSV?</b></summary>
 
-Na pasta do script, com o nome `relatorio_oct_<ano>_Sem_<semana>.csv` (um arquivo por semana, separado por `;`, abre direto no Excel). Leituras de simulação não entram no relatório.
+Na pasta do script (ou, no `.exe`, na pasta do executável), com o nome `relatorio_oct_<ano>_Sem_<semana>.csv` (um arquivo por semana, separado por `;`, abre direto no Excel). Leituras de simulação não entram no relatório.
 
-No `.exe` de arquivo único (`--onefile`) o programa roda a partir de uma pasta temporária do PyInstaller, e é lá que o CSV e o Core Temp vão parar. Essa pasta é apagada quando o programa fecha. Se o relatório for importante, rode pelo Python ou compile sem `--onefile`.
+Desde a v1.1, o `.exe` de arquivo único (`--onefile`) grava o CSV e o `lib_coretemp\` ao lado do `MonitorOCT.exe`, e não mais na pasta temporária do PyInstaller (que era apagada ao fechar). Por isso, deixe o `.exe` numa pasta onde ele possa gravar, como `C:\MonitorOCT\`.
 </details>
 
 <details>
 <summary><b>As faixas de temperatura servem para qualquer PC?</b></summary>
 
-Foram escolhidas para o PC do OCT (aviso a partir de 76 °C, crítico a partir de 88 °C). Para outro PC, os limites ficam no começo do laço de verificação do script (`update_loop`).
+Foram escolhidas para o PC do OCT: aviso de 76 °C até abaixo de 88 °C, crítico a partir de 88 °C (valores quebrados como 87,5 °C já contam como aviso). Para outro PC, mude as constantes `TEMP_AVISO_C` e `TEMP_CRITICA_C` no script.
 </details>
 
 <details>

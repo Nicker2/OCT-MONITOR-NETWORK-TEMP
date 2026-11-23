@@ -1,6 +1,12 @@
 # 📜 Histórico de alterações
 
-> Voltar para o [README](../README.md). O projeto não tem números de versão; as entradas seguem as datas dos commits.
+> Voltar para o [README](../README.md). Antes da v1.1 o projeto não tinha números de versão; as entradas anteriores seguem as datas dos commits.
+
+### v1.1 — 23/11/2026 — correções
+
+- **Buraco nas faixas de temperatura corrigido.** Antes, aviso era `76 ≤ temp ≤ 87` e crítico `temp ≥ 88`, então 87,5 °C não caía em nenhum alerta e aparecia como normal. Agora: aviso `76 ≤ temp < 88`, crítico `temp ≥ 88`, com comparações contínuas (`classificar_temperatura()`, constantes `TEMP_AVISO_C`/`TEMP_CRITICA_C`).
+- **CSV e Core Temp fora da pasta temporária no `.exe`.** No `--onefile` o relatório e o `lib_coretemp\` iam para `sys._MEIPASS`, apagada ao fechar. Agora ficam na pasta do executável (`pasta_do_programa()`).
+- Testes em `tests/test_regras.py` (faixas e pasta do programa), sem janela nem hardware.
 
 ### 18/05/2026 — Core Temp no lugar do LibreHardwareMonitor
 
